@@ -1,0 +1,22 @@
+import { Stack } from 'expo-router';
+
+export default function AuthLayout() {
+  return (
+    <Stack>
+      <Stack.Screen 
+        name="login" 
+        options={{ 
+          title: 'Masuk',
+          headerShown: true,
+        }} 
+      />
+      <Stack.Screen 
+        name="register" 
+        options={{ 
+          title: 'Daftar Akun',
+          headerShown: true,
+        }} 
+      />
+    </Stack>
+  );
+}

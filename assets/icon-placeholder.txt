@@ -1,0 +1,13 @@
+# Placeholder untuk icon.png
+# Untuk production, ganti dengan icon aplikasi yang sebenarnya
+# Ukuran: 1024x1024 px
+# Format: PNG dengan transparent background
+
+File ini adalah placeholder.
+Aplikasi akan menggunakan default Expo icon jika file ini tidak ada.
+
+Untuk membuat icon custom:
+1. Buat icon 1024x1024 px di design tool (Figma, Canva, dll)
+2. Export sebagai PNG
+3. Simpan di assets/icon.png
+4. Jalankan: npx expo prebuild --clean

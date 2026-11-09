@@ -1,0 +1,40 @@
+{
+  "expo": {
+    "name": "LaporDesa",
+    "slug": "lapordesa",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "scheme": "lapordesa",
+    "splash": {
+      "backgroundColor": "#2196F3",
+      "resizeMode": "contain"
+    },
+    "assetBundlePatterns": [
+      "**/*"
+    ],
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.lapordesa.app"
+    },
+    "android": {
+      "package": "com.lapordesa.app",
+      "permissions": [
+        "ACCESS_FINE_LOCATION",
+        "ACCESS_COARSE_LOCATION"
+      ]
+    },
+    "web": {
+      "bundler": "metro"
+    },
+    "plugins": [
+      "expo-router",
+      [
+        "expo-location",
+        {
+          "locationAlwaysAndWhenInUsePermission": "Aplikasi memerlukan akses lokasi untuk mengambil koordinat GPS kerusakan infrastruktur."
+        }
+      ]
+    ]
+  }
+}
