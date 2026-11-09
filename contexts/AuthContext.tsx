@@ -7,6 +7,7 @@ import { Profile } from '@/types';
 interface AuthContextType {
   session: Session | null;
   profile: Profile | null;
+  profileError: string | null;
   loading: boolean;
   signOut: () => Promise<void>;
 }
@@ -14,6 +15,7 @@ interface AuthContextType {
 const AuthContext = createContext<AuthContextType>({
   session: null,
   profile: null,
+  profileError: null,
   loading: true,
   signOut: async () => {},
 });
@@ -21,6 +23,7 @@ const AuthContext = createContext<AuthContextType>({
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
+  const [profileError, setProfileError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -42,6 +45,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           await loadProfile(session.user.id);
         } else {
           setProfile(null);
+          setProfileError(null);
           setLoading(false);
         }
       }
@@ -53,12 +57,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   async function loadProfile(userId: string) {
+    setProfileError(null);
     try {
       const profileData = await getUserProfile(userId);
+      if (!profileData) {
+        setProfile(null);
+        setProfileError('Profil akun tidak ditemukan. Hubungi admin desa untuk memeriksa akun Anda.');
+        return;
+      }
       setProfile(profileData);
     } catch (error) {
       console.error('Error loading profile:', error);
       setProfile(null);
+      setProfileError('Profil gagal dimuat. Periksa koneksi dan coba masuk kembali.');
     } finally {
       setLoading(false);
     }
@@ -76,7 +87,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }
 
   return (
-    <AuthContext.Provider value={{ session, profile, loading, signOut }}>
+    <AuthContext.Provider value={{ session, profile, profileError, loading, signOut }}>
       {children}
     </AuthContext.Provider>
   );

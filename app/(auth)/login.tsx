@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   View,
   Text,
@@ -13,27 +13,54 @@ import {
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { signIn } from '@/lib/auth';
+import { useAuth } from '@/contexts/AuthContext';
 
 export default function LoginScreen() {
   const router = useRouter();
+  const { profile, profileError, loading: authLoading } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
+  const [errorMessage, setErrorMessage] = useState('');
+
+  useEffect(() => {
+    if (!profile) return;
+    const roleRoutes = {
+      masyarakat: '/(masyarakat)/beranda',
+      admin: '/(admin)/dashboard',
+      petugas: '/(petugas)/beranda',
+    } as const;
+    const destination = roleRoutes[profile.peran as keyof typeof roleRoutes];
+    if (destination) {
+      router.replace(destination);
+    } else {
+      setErrorMessage('Peran akun tidak dikenali. Hubungi admin desa.');
+    }
+  }, [profile, router]);
 
   async function handleLogin() {
-    if (!email || !password) {
-      Alert.alert('Error', 'Email dan password harus diisi');
+    const normalizedEmail = email.trim();
+    if (!normalizedEmail || !password) {
+      setErrorMessage('Email dan password harus diisi.');
       return;
     }
 
+    setErrorMessage('');
     setLoading(true);
     try {
-      await signIn(email, password);
-      // Navigation akan ditangani oleh index.tsx setelah auth state berubah
-    } catch (error: any) {
-      Alert.alert(
-        'Login Gagal',
-        error.message || 'Terjadi kesalahan saat login. Silakan coba lagi.'
+      const data = await signIn(normalizedEmail, password);
+      if (!data.user) {
+        throw new Error('Login tidak berhasil. Periksa email dan password, lalu coba lagi.');
+      }
+
+      // AuthContext akan memuat profil, lalu effect di atas mengarahkan sesuai peran.
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : '';
+      const lowerMessage = message.toLowerCase();
+      setErrorMessage(
+        lowerMessage.includes('invalid login credentials') || lowerMessage.includes('invalid_credentials')
+          ? 'Email atau password salah. Periksa kembali dan coba lagi.'
+          : message || 'Tidak dapat masuk. Periksa koneksi internet dan coba lagi.'
       );
     } finally {
       setLoading(false);
@@ -53,6 +80,12 @@ export default function LoginScreen() {
           </Text>
 
           <View style={styles.form}>
+            {!!(errorMessage || profileError) && (
+              <View accessibilityRole="alert" style={styles.errorBox}>
+                <Text style={styles.errorText}>{errorMessage || profileError}</Text>
+              </View>
+            )}
+
             <Text style={styles.label}>Email</Text>
             <TextInput
               style={styles.input}
@@ -82,7 +115,7 @@ export default function LoginScreen() {
               onPress={handleLogin}
               disabled={loading}
             >
-              {loading ? (
+              {loading || authLoading ? (
                 <ActivityIndicator color="#fff" />
               ) : (
                 <Text style={styles.buttonText}>Masuk</Text>
@@ -158,6 +191,19 @@ const styles = StyleSheet.create({
   },
   buttonDisabled: {
     backgroundColor: '#B3D9FF',
+  },
+  errorBox: {
+    backgroundColor: '#FDECEA',
+    borderColor: '#F44336',
+    borderWidth: 1,
+    borderRadius: 8,
+    padding: 12,
+    marginBottom: 16,
+  },
+  errorText: {
+    color: '#B71C1C',
+    fontSize: 14,
+    lineHeight: 20,
   },
   buttonText: {
     color: '#fff',
