@@ -238,7 +238,7 @@ export default function BuatLaporanScreen() {
       }
 
       setFormFeedback({ type: 'success', message: `Laporan ${report.id} berhasil dikirim dengan status Pending.` });
-      router.replace('/(masyarakat)/riwayat');
+      router.replace('/(masyarakat)/(tabs)/riwayat');
     } catch (error) {
       // Prevent a report without its mandatory evidence photo if storage/database upload fails.
       if (reportId) {

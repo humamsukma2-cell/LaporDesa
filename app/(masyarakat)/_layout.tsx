@@ -1,6 +1,6 @@
 import { useEffect } from 'react';
 import { useRouter } from 'expo-router';
-import { Tabs } from 'expo-router';
+import { Stack } from 'expo-router';
 import { useAuth } from '@/contexts/AuthContext';
 import { View, ActivityIndicator, StyleSheet } from 'react-native';
 
@@ -23,41 +23,10 @@ export default function MasyarakatLayout() {
   }
 
   return (
-    <Tabs
-      screenOptions={{
-        tabBarActiveTintColor: '#2196F3',
-        tabBarInactiveTintColor: '#999',
-      }}
-    >
-      <Tabs.Screen
-        name="beranda"
-        options={{
-          title: 'Beranda',
-          headerTitle: 'Beranda',
-        }}
-      />
-      <Tabs.Screen
-        name="riwayat"
-        options={{
-          title: 'Riwayat',
-          headerTitle: 'Riwayat Laporan',
-        }}
-      />
-      <Tabs.Screen
-        name="buat-laporan"
-        options={{
-          title: 'Buat Laporan',
-          headerTitle: 'Buat Laporan',
-        }}
-      />
-      <Tabs.Screen
-        name="detail/[id]"
-        options={{
-          href: null, // Hide from tab bar
-          title: 'Detail Laporan',
-        }}
-      />
-    </Tabs>
+    <Stack screenOptions={{ headerShown: false }}>
+      <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+      <Stack.Screen name="detail/[id]" options={{ headerShown: true, title: 'Detail Laporan' }} />
+    </Stack>
   );
 }
 

@@ -32,7 +32,7 @@ export default function BerandaMasyarakatScreen() {
       <View style={styles.content}>
         <TouchableOpacity
           style={styles.primaryButton}
-          onPress={() => router.push('/(masyarakat)/buat-laporan')}
+          onPress={() => router.push('/(masyarakat)/(tabs)/buat-laporan')}
         >
           <Text style={styles.primaryButtonText}>+ Buat Laporan Baru</Text>
         </TouchableOpacity>

@@ -26,7 +26,7 @@ export default function LoginScreen() {
   useEffect(() => {
     if (!profile) return;
     const roleRoutes = {
-      masyarakat: '/(masyarakat)/beranda',
+      masyarakat: '/(masyarakat)/(tabs)/beranda',
       admin: '/(admin)/dashboard',
       petugas: '/(petugas)/beranda',
     } as const;

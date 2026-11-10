@@ -22,7 +22,7 @@ export default function Index() {
       // Redirect based on role
       switch (profile.peran) {
         case 'masyarakat':
-          router.replace('/(masyarakat)/beranda');
+          router.replace('/(masyarakat)/(tabs)/beranda');
           break;
         case 'admin':
           router.replace('/(admin)/dashboard');
