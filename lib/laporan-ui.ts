@@ -1,4 +1,4 @@
-import type { StatusLaporanType } from '@/types';
+import type { StatusLaporanType, TingkatType } from '@/types';
 
 export const STATUS_META: Record<StatusLaporanType, { label: string; color: string; background: string }> = {
   pending: { label: 'Menunggu verifikasi', color: '#B7791F', background: '#FEFCBF' },
@@ -19,6 +19,56 @@ export const STATUS_ORDER: StatusLaporanType[] = [
   'resolved',
   'rejected',
 ];
+
+export interface KonfigurasiPrioritas {
+  bobot_bahaya: number;
+  bobot_dampak: number;
+  bobot_keparahan: number;
+  bobot_frekuensi: number;
+  ambang_rendah_max: number;
+  ambang_sedang_max: number;
+  ambang_tinggi_max: number;
+}
+
+export const DEFAULT_KONFIGURASI_PRIORITAS: KonfigurasiPrioritas = {
+  bobot_bahaya: 0.4,
+  bobot_dampak: 0.3,
+  bobot_keparahan: 0.2,
+  bobot_frekuensi: 0.1,
+  ambang_rendah_max: 1.8,
+  ambang_sedang_max: 2.6,
+  ambang_tinggi_max: 3.4,
+};
+
+export const PRIORITY_META: Record<TingkatType, { label: string; color: string; background: string }> = {
+  rendah: { label: 'Rendah', color: '#2F855A', background: '#C6F6D5' },
+  sedang: { label: 'Sedang', color: '#B7791F', background: '#FEFCBF' },
+  tinggi: { label: 'Tinggi', color: '#C05621', background: '#FEEBC8' },
+  sangat_tinggi: { label: 'Sangat tinggi', color: '#C53030', background: '#FED7D7' },
+};
+
+export function priorityMeta(value: TingkatType | string) {
+  return PRIORITY_META[value as TingkatType] ?? { label: value, color: '#475569', background: '#E2E8F0' };
+}
+
+export function hitungSkorPrioritas(
+  values: { bahaya: number; dampak: number; keparahan: number; frekuensi: number },
+  config: KonfigurasiPrioritas,
+) {
+  return Math.round((
+    values.bahaya * config.bobot_bahaya
+    + values.dampak * config.bobot_dampak
+    + values.keparahan * config.bobot_keparahan
+    + values.frekuensi * config.bobot_frekuensi
+  ) * 100) / 100;
+}
+
+export function rekomendasiPrioritas(skor: number, config: KonfigurasiPrioritas): TingkatType {
+  if (skor < config.ambang_rendah_max) return 'rendah';
+  if (skor < config.ambang_sedang_max) return 'sedang';
+  if (skor < config.ambang_tinggi_max) return 'tinggi';
+  return 'sangat_tinggi';
+}
 
 export function statusMeta(status: StatusLaporanType | string) {
   return STATUS_META[status as StatusLaporanType]

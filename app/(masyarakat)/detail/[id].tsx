@@ -3,6 +3,7 @@ import { ActivityIndicator, Image, Linking, ScrollView, StyleSheet, Text, Toucha
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
+import { priorityMeta } from '@/lib/laporan-ui';
 import type { StatusLaporanType, TingkatType } from '@/types';
 
 type ReportDetail = {
@@ -22,6 +23,7 @@ type ReportDetail = {
 type HistoryEntry = { id: string; status_lama: StatusLaporanType | null; status_baru: StatusLaporanType; catatan: string | null; waktu: string };
 type PhotoEntry = { id: string; path: string; jenis: string };
 type PhotoPreview = PhotoEntry & { url: string };
+type PriorityPreview = { skor_rekomendasi: number; prioritas_akhir: TingkatType; created_at: string; catatan_override: string | null };
 
 const STATUS: Record<StatusLaporanType, string> = {
   pending: 'Menunggu verifikasi', needs_information: 'Perlu informasi', verified: 'Terverifikasi',
@@ -43,6 +45,7 @@ export default function DetailLaporanScreen() {
   const [report, setReport] = useState<ReportDetail | null>(null);
   const [history, setHistory] = useState<HistoryEntry[]>([]);
   const [photos, setPhotos] = useState<PhotoPreview[]>([]);
+  const [priority, setPriority] = useState<PriorityPreview | null>(null);
   const [loading, setLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState('');
 
@@ -81,6 +84,13 @@ export default function DetailLaporanScreen() {
         .order('uploaded_at', { ascending: true });
       if (photoError) throw photoError;
 
+      const { data: priorityData, error: priorityError } = await supabase
+        .from('penilaian_prioritas')
+        .select('skor_rekomendasi, prioritas_akhir, created_at, catatan_override')
+        .eq('laporan_id', id)
+        .maybeSingle();
+      if (priorityError) throw priorityError;
+
       const photoRows = (photoData ?? []) as PhotoEntry[];
       const previews = await Promise.all(photoRows.map(async (photo) => {
         const { data, error } = await supabase.storage.from(BUCKET).createSignedUrl(photo.path, 60 * 30);
@@ -94,6 +104,7 @@ export default function DetailLaporanScreen() {
       setReport(reportData as unknown as ReportDetail);
       setHistory((historyData ?? []) as HistoryEntry[]);
       setPhotos(previews);
+      setPriority((priorityData as unknown as PriorityPreview) ?? null);
     } catch (error) {
       console.error('[DetailLaporan] Failed to load report detail:', error);
       setErrorMessage(error instanceof Error ? error.message : 'Gagal memuat detail laporan.');
@@ -150,6 +161,23 @@ export default function DetailLaporanScreen() {
         ))}</View>
       )}
 
+      <Text style={styles.sectionTitle}>Prioritas penanganan</Text>
+      {priority ? (
+        <View style={styles.locationBox}>
+          <Text style={styles.statusLabel}>Prioritas yang ditetapkan admin</Text>
+          <Text style={[styles.priorityValue, { color: priorityMeta(priority.prioritas_akhir).color }]}>
+            {priorityMeta(priority.prioritas_akhir).label}
+          </Text>
+          <Text style={styles.body}>Skor penilaian: {Number(priority.skor_rekomendasi).toFixed(2)} dari 5,00</Text>
+          {!!priority.catatan_override && (
+            <Text style={styles.body}>Alasan penetapan admin: {priority.catatan_override}</Text>
+          )}
+          <Text style={styles.muted}>Dinilai {formatDate(priority.created_at)}. Keputusan akhir tetap pada pihak berwenang.</Text>
+        </View>
+      ) : (
+        <Text style={styles.muted}>Prioritas belum ditetapkan. Admin akan menilai setelah laporan diverifikasi.</Text>
+      )}
+
       <Text style={styles.sectionTitle}>Riwayat status</Text>
       {history.length === 0 ? <Text style={styles.muted}>Riwayat status belum tersedia.</Text> : history.map((entry) => (
         <View key={entry.id} style={styles.timelineItem}>
@@ -183,6 +211,7 @@ const styles = StyleSheet.create({
   body: { color: '#334155', fontSize: 14, lineHeight: 21 },
   locationBox: { backgroundColor: '#fff', padding: 13, borderRadius: 9, marginTop: 4, borderWidth: 1, borderColor: '#E2E8F0' },
   link: { color: '#1976D2', fontWeight: '700', marginTop: 9 },
+  priorityValue: { fontSize: 19, fontWeight: '800', marginVertical: 6 },
   photoGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
   photoCard: { width: '48%', backgroundColor: '#fff', padding: 6, borderRadius: 9 },
   photo: { width: '100%', aspectRatio: 1, borderRadius: 6 },

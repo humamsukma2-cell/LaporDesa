@@ -14,7 +14,18 @@ import {
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { supabase } from '@/lib/supabase';
-import { categoryName, describeError, formatDateTime, statusMeta } from '@/lib/laporan-ui';
+import {
+  DEFAULT_KONFIGURASI_PRIORITAS,
+  PRIORITY_META,
+  categoryName,
+  describeError,
+  formatDateTime,
+  hitungSkorPrioritas,
+  priorityMeta,
+  rekomendasiPrioritas,
+  statusMeta,
+} from '@/lib/laporan-ui';
+import type { KonfigurasiPrioritas } from '@/lib/laporan-ui';
 import type { StatusLaporanType, TingkatType } from '@/types';
 
 type ReportDetail = {
@@ -37,6 +48,24 @@ type PhotoEntry = { id: string; path: string; jenis: string };
 type PhotoPreview = PhotoEntry & { url: string };
 type InfoRequest = { id: string; permintaan: string; jawaban: string | null; created_at: string; dijawab_pada: string | null };
 type Action = 'verified' | 'needs_information' | 'rejected';
+type Criteria = { bahaya: number; dampak: number; keparahan: number; frekuensi: number };
+type PriorityRow = {
+  tingkat_bahaya: number;
+  dampak_masyarakat: number;
+  tingkat_keparahan: number;
+  frekuensi_laporan: number;
+  skor_rekomendasi: number;
+  prioritas_akhir: TingkatType;
+  created_at: string;
+  catatan_override: string | null;
+};
+type AssignmentRow = {
+  id: string;
+  petugas_id: string;
+  waktu_penugasan: string;
+  petugas: { nama: string } | { nama: string }[] | null;
+};
+type Officer = { id: string; nama: string };
 
 const URGENCY_LABEL: Record<TingkatType, string> = { rendah: 'Rendah', sedang: 'Sedang', tinggi: 'Tinggi', sangat_tinggi: 'Sangat tinggi' };
 const ACTION_LABEL: Record<Action, string> = {
@@ -44,6 +73,12 @@ const ACTION_LABEL: Record<Action, string> = {
   needs_information: 'Minta informasi tambahan',
   rejected: 'Tolak laporan',
 };
+const CRITERIA: { key: keyof Criteria; label: string; weightKey: keyof KonfigurasiPrioritas }[] = [
+  { key: 'bahaya', label: 'Tingkat bahaya', weightKey: 'bobot_bahaya' },
+  { key: 'dampak', label: 'Dampak terhadap masyarakat', weightKey: 'bobot_dampak' },
+  { key: 'keparahan', label: 'Tingkat keparahan', weightKey: 'bobot_keparahan' },
+  { key: 'frekuensi', label: 'Frekuensi laporan lokasi sama', weightKey: 'bobot_frekuensi' },
+];
 
 export default function DetailLaporanAdminScreen() {
   const { id: rawId } = useLocalSearchParams<{ id: string | string[] }>();
@@ -61,6 +96,23 @@ export default function DetailLaporanAdminScreen() {
   const [submitting, setSubmitting] = useState(false);
   const [actionError, setActionError] = useState('');
   const [successMessage, setSuccessMessage] = useState('');
+
+  const [config, setConfig] = useState<KonfigurasiPrioritas>(DEFAULT_KONFIGURASI_PRIORITAS);
+  const [priority, setPriority] = useState<PriorityRow | null>(null);
+  const [assignment, setAssignment] = useState<AssignmentRow | null>(null);
+  const [priorityFormOpen, setPriorityFormOpen] = useState(false);
+  const [criteria, setCriteria] = useState<Criteria>({ bahaya: 3, dampak: 3, keparahan: 3, frekuensi: 3 });
+  const [finalPriority, setFinalPriority] = useState<TingkatType>('sedang');
+  const [priorityOverridden, setPriorityOverridden] = useState(false);
+  const [savingPriority, setSavingPriority] = useState(false);
+  const [priorityError, setPriorityError] = useState('');
+  const [overrideReason, setOverrideReason] = useState('');
+  const [assignmentOpen, setAssignmentOpen] = useState(false);
+  const [officers, setOfficers] = useState<Officer[]>([]);
+  const [loadingOfficers, setLoadingOfficers] = useState(false);
+  const [selectedOfficer, setSelectedOfficer] = useState('');
+  const [savingAssignment, setSavingAssignment] = useState(false);
+  const [assignmentError, setAssignmentError] = useState('');
 
   const loadDetail = useCallback(async () => {
     if (!id) {
@@ -83,14 +135,35 @@ export default function DetailLaporanAdminScreen() {
         return;
       }
 
-      const [historyResult, photoResult, infoResult] = await Promise.all([
+      const [historyResult, photoResult, infoResult, priorityResult, assignmentResult, configResult] = await Promise.all([
         supabase.from('riwayat_status').select('id, status_lama, status_baru, catatan, waktu').eq('laporan_id', id).order('waktu', { ascending: true }),
         supabase.from('foto_laporan').select('id, path, jenis').eq('laporan_id', id).order('uploaded_at', { ascending: true }),
         supabase.from('informasi_tambahan').select('id, permintaan, jawaban, created_at, dijawab_pada').eq('laporan_id', id).order('created_at', { ascending: true }),
+        supabase.from('penilaian_prioritas').select('tingkat_bahaya, dampak_masyarakat, tingkat_keparahan, frekuensi_laporan, skor_rekomendasi, prioritas_akhir, created_at, catatan_override').eq('laporan_id', id).maybeSingle(),
+        supabase.from('penugasan').select('id, petugas_id, waktu_penugasan, petugas:profiles!penugasan_petugas_id_fkey(nama)').eq('laporan_id', id).maybeSingle(),
+        supabase.from('konfigurasi_prioritas').select('bobot_bahaya, bobot_dampak, bobot_keparahan, bobot_frekuensi, ambang_rendah_max, ambang_sedang_max, ambang_tinggi_max').eq('id', 1).maybeSingle(),
       ]);
       if (historyResult.error) throw historyResult.error;
       if (photoResult.error) throw photoResult.error;
       if (infoResult.error) throw infoResult.error;
+      if (priorityResult.error) throw priorityResult.error;
+      if (assignmentResult.error) throw assignmentResult.error;
+      if (configResult.error) {
+        console.warn('[DetailAdmin] Priority configuration unavailable, using defaults:', configResult.error.message);
+      }
+
+      if (configResult.data) {
+        const raw = configResult.data as unknown as KonfigurasiPrioritas;
+        setConfig({
+          bobot_bahaya: Number(raw.bobot_bahaya),
+          bobot_dampak: Number(raw.bobot_dampak),
+          bobot_keparahan: Number(raw.bobot_keparahan),
+          bobot_frekuensi: Number(raw.bobot_frekuensi),
+          ambang_rendah_max: Number(raw.ambang_rendah_max),
+          ambang_sedang_max: Number(raw.ambang_sedang_max),
+          ambang_tinggi_max: Number(raw.ambang_tinggi_max),
+        });
+      }
 
       const photoRows = (photoResult.data ?? []) as PhotoEntry[];
       const previews = await Promise.all(photoRows.map(async (photo) => {
@@ -106,6 +179,8 @@ export default function DetailLaporanAdminScreen() {
       setHistory((historyResult.data ?? []) as HistoryEntry[]);
       setPhotos(previews);
       setInfoRequests((infoResult.data ?? []) as InfoRequest[]);
+      setPriority((priorityResult.data as unknown as PriorityRow) ?? null);
+      setAssignment((assignmentResult.data as unknown as AssignmentRow) ?? null);
     } catch (error) {
       console.error('[DetailAdmin] Failed to load report detail:', error);
       setErrorMessage(describeError(error));
@@ -156,6 +231,111 @@ export default function DetailLaporanAdminScreen() {
     }
   }
 
+  function openPriorityForm() {
+    const initial: Criteria = { bahaya: 3, dampak: 3, keparahan: 3, frekuensi: 3 };
+    setCriteria(initial);
+    setFinalPriority(rekomendasiPrioritas(hitungSkorPrioritas(initial, config), config));
+    setPriorityOverridden(false);
+    setOverrideReason('');
+    setPriorityError('');
+    setSuccessMessage('');
+    setPriorityFormOpen(true);
+  }
+
+  function updateCriterion(key: keyof Criteria, value: number) {
+    const next = { ...criteria, [key]: value };
+    setCriteria(next);
+    if (!priorityOverridden) {
+      setFinalPriority(rekomendasiPrioritas(hitungSkorPrioritas(next, config), config));
+    }
+  }
+
+  function chooseFinalPriority(level: TingkatType, recommendation: TingkatType) {
+    setFinalPriority(level);
+    setPriorityOverridden(level !== recommendation);
+    if (level === recommendation) setOverrideReason('');
+  }
+
+  async function submitPriority() {
+    if (!id) return;
+    if (priorityOverridden && !overrideReason.trim()) {
+      setPriorityError('Alasan perbedaan prioritas wajib diisi.');
+      return;
+    }
+    setSavingPriority(true);
+    setPriorityError('');
+    setSuccessMessage('');
+    try {
+      const { error } = await supabase.rpc('simpan_penilaian_prioritas', {
+        p_laporan_id: id,
+        p_bahaya: criteria.bahaya,
+        p_dampak: criteria.dampak,
+        p_keparahan: criteria.keparahan,
+        p_frekuensi: criteria.frekuensi,
+        p_prioritas_akhir: finalPriority,
+        p_catatan_override: priorityOverridden ? overrideReason.trim() : null,
+      });
+      if (error) throw error;
+      setPriorityFormOpen(false);
+      setOverrideReason('');
+      setSuccessMessage('Penilaian prioritas berhasil disimpan.');
+      await loadDetail();
+    } catch (error) {
+      console.error('[DetailAdmin] Priority assessment failed:', error);
+      setPriorityError(describeError(error));
+    } finally {
+      setSavingPriority(false);
+    }
+  }
+
+  async function openAssignmentForm() {
+    setAssignmentOpen(true);
+    setAssignmentError('');
+    setSuccessMessage('');
+    if (officers.length > 0) return;
+    setLoadingOfficers(true);
+    try {
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('id, nama')
+        .eq('peran', 'petugas')
+        .order('nama', { ascending: true });
+      if (error) throw error;
+      setOfficers((data ?? []) as Officer[]);
+    } catch (error) {
+      console.error('[DetailAdmin] Failed to load officers:', error);
+      setAssignmentError(describeError(error));
+    } finally {
+      setLoadingOfficers(false);
+    }
+  }
+
+  async function submitAssignment() {
+    if (!id || !selectedOfficer) {
+      setAssignmentError('Pilih petugas terlebih dahulu.');
+      return;
+    }
+    setSavingAssignment(true);
+    setAssignmentError('');
+    setSuccessMessage('');
+    try {
+      const { error } = await supabase.rpc('tugaskan_petugas', {
+        p_laporan_id: id,
+        p_petugas_id: selectedOfficer,
+      });
+      if (error) throw error;
+      setAssignmentOpen(false);
+      setSelectedOfficer('');
+      setSuccessMessage('Laporan berhasil ditugaskan ke petugas.');
+      await loadDetail();
+    } catch (error) {
+      console.error('[DetailAdmin] Assignment failed:', error);
+      setAssignmentError(describeError(error));
+    } finally {
+      setSavingAssignment(false);
+    }
+  }
+
   async function openCoordinates() {
     if (report?.latitude == null || report.longitude == null) return;
     const url = `https://www.google.com/maps/search/?api=1&query=${report.latitude},${report.longitude}`;
@@ -180,6 +360,13 @@ export default function DetailLaporanAdminScreen() {
 
   const status = statusMeta(report.status);
   const canVerify = report.status === 'pending';
+  const previewScore = hitungSkorPrioritas(criteria, config);
+  const previewRecommendation = rekomendasiPrioritas(previewScore, config);
+  const canAssess = report.status === 'verified' && !priority;
+  const canAssign = report.status === 'verified' && !!priority && !assignment;
+  const assignedOfficerName = assignment
+    ? (Array.isArray(assignment.petugas) ? assignment.petugas[0]?.nama : assignment.petugas?.nama) ?? 'Petugas'
+    : null;
 
   return (
     <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
@@ -267,6 +454,191 @@ export default function DetailLaporanAdminScreen() {
           <Text style={styles.muted}>Hanya laporan berstatus Pending yang dapat diverifikasi.</Text>
         )}
 
+        <Text style={styles.sectionTitle}>Penilaian prioritas</Text>
+        {priority ? (
+          <View style={styles.card}>
+            {CRITERIA.map((criterion) => (
+              <View key={criterion.key} style={styles.scoreRow}>
+                <Text style={styles.scoreLabel}>{criterion.label}</Text>
+                <Text style={styles.scoreValue}>{priority[criterion.key === 'bahaya' ? 'tingkat_bahaya' : criterion.key === 'dampak' ? 'dampak_masyarakat' : criterion.key === 'keparahan' ? 'tingkat_keparahan' : 'frekuensi_laporan']} / 5</Text>
+              </View>
+            ))}
+            <View style={styles.scoreRow}>
+              <Text style={styles.scoreLabel}>Skor rekomendasi</Text>
+              <Text style={styles.scoreValue}>{Number(priority.skor_rekomendasi).toFixed(2)}</Text>
+            </View>
+            <View style={styles.scoreRow}>
+              <Text style={styles.scoreLabel}>Rekomendasi sistem</Text>
+              <Text style={[styles.scoreValue, { color: priorityMeta(rekomendasiPrioritas(Number(priority.skor_rekomendasi), config)).color }]}>
+                {priorityMeta(rekomendasiPrioritas(Number(priority.skor_rekomendasi), config)).label}
+              </Text>
+            </View>
+            <View style={[styles.finalPriority, { backgroundColor: priorityMeta(priority.prioritas_akhir).background }]}>
+              <Text style={styles.finalPriorityLabel}>Prioritas akhir admin</Text>
+              <Text style={[styles.finalPriorityValue, { color: priorityMeta(priority.prioritas_akhir).color }]}>{priorityMeta(priority.prioritas_akhir).label}</Text>
+              {priority.prioritas_akhir !== rekomendasiPrioritas(Number(priority.skor_rekomendasi), config) && (
+                <Text style={styles.overrideNote}>
+                  Berbeda dari rekomendasi sistem ({priorityMeta(rekomendasiPrioritas(Number(priority.skor_rekomendasi), config)).label}), sesuai keputusan admin.
+                </Text>
+              )}
+              {!!priority.catatan_override && (
+                <Text style={styles.overrideNote}>Alasan admin: {priority.catatan_override}</Text>
+              )}
+            </View>
+            <Text style={styles.muted}>Dinilai {formatDateTime(priority.created_at)}. Prioritas yang sudah ditetapkan tidak dapat diubah.</Text>
+          </View>
+        ) : canAssess ? (
+          <View style={styles.actionBox}>
+            {!priorityFormOpen ? (
+              <>
+                <Text style={styles.hint}>Nilai empat kriteria (skala 1–5). Bobot: bahaya 40%, dampak 30%, keparahan 20%, frekuensi 10%. Sistem memberi rekomendasi; prioritas akhir tetap ditetapkan admin.</Text>
+                <TouchableOpacity style={[styles.actionButton, styles.confirmButton]} onPress={openPriorityForm}>
+                  <Text style={styles.confirmText}>Nilai prioritas</Text>
+                </TouchableOpacity>
+              </>
+            ) : (
+              <View>
+                <Text style={styles.actionTitle}>Form penilaian prioritas</Text>
+                {CRITERIA.map((criterion) => (
+                  <View key={criterion.key} style={styles.criteriaBlock}>
+                    <Text style={styles.criteriaLabel}>{criterion.label} ({Math.round(config[criterion.weightKey] * 100)}%)</Text>
+                    <View style={styles.criteriaOptions}>
+                      {[1, 2, 3, 4, 5].map((value) => (
+                        <TouchableOpacity
+                          key={value}
+                          accessibilityRole="button"
+                          accessibilityState={{ selected: criteria[criterion.key] === value }}
+                          style={[styles.criteriaChip, criteria[criterion.key] === value && styles.criteriaChipActive]}
+                          onPress={() => updateCriterion(criterion.key, value)}
+                          disabled={savingPriority}
+                        >
+                          <Text style={[styles.criteriaChipText, criteria[criterion.key] === value && styles.criteriaChipTextActive]}>{value}</Text>
+                        </TouchableOpacity>
+                      ))}
+                    </View>
+                  </View>
+                ))}
+
+                <View style={styles.previewBox}>
+                  <Text style={styles.previewLabel}>Skor berbobot</Text>
+                  <Text style={styles.previewValue}>{previewScore.toFixed(2)}</Text>
+                  <Text style={styles.previewLabel}>Rekomendasi sistem: <Text style={{ color: priorityMeta(previewRecommendation).color, fontWeight: '800' }}>{priorityMeta(previewRecommendation).label}</Text></Text>
+                  {finalPriority !== previewRecommendation && (
+                    <Text style={styles.overrideWarning}>
+                      Prioritas akhir berbeda dari rekomendasi sistem. Pilihan ini akan tercatat sebagai keputusan admin.
+                    </Text>
+                  )}
+                </View>
+
+                <Text style={styles.criteriaLabel}>Prioritas akhir (dapat berbeda dari rekomendasi)</Text>
+                <View style={styles.priorityChoices}>
+                  {(Object.keys(PRIORITY_META) as TingkatType[]).map((level) => (
+                    <TouchableOpacity
+                      key={level}
+                      style={[styles.priorityChip, finalPriority === level && { backgroundColor: PRIORITY_META[level].background, borderColor: PRIORITY_META[level].color }]}
+                      onPress={() => chooseFinalPriority(level, previewRecommendation)}
+                      disabled={savingPriority}
+                    >
+                      <Text style={[styles.priorityChipText, finalPriority === level && { color: PRIORITY_META[level].color, fontWeight: '800' }]}>{PRIORITY_META[level].label}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+
+                {priorityOverridden && (
+                  <View style={styles.overrideInputBox}>
+                    <Text style={styles.criteriaLabel}>Alasan perbedaan prioritas (wajib)</Text>
+                    <TextInput
+                      style={styles.overrideInput}
+                      value={overrideReason}
+                      onChangeText={setOverrideReason}
+                      placeholder="Jelaskan alasan admin menetapkan prioritas berbeda dari rekomendasi sistem"
+                      multiline
+                      maxLength={500}
+                      editable={!savingPriority}
+                    />
+                    <Text style={styles.overrideHint}>Alasan ini akan tercatat dan terlihat oleh pelapor.</Text>
+                  </View>
+                )}
+
+                {!!priorityError && <Text style={styles.actionError}>{priorityError}</Text>}
+                <View style={styles.actionRow}>
+                  <TouchableOpacity style={[styles.actionButton, styles.cancelButton]} onPress={() => setPriorityFormOpen(false)} disabled={savingPriority}>
+                    <Text style={styles.cancelText}>Batal</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={[styles.actionButton, styles.confirmButton, savingPriority && styles.disabled]} onPress={() => void submitPriority()} disabled={savingPriority}>
+                    {savingPriority ? <ActivityIndicator color="#fff" /> : <Text style={styles.confirmText}>Simpan penilaian</Text>}
+                  </TouchableOpacity>
+                </View>
+              </View>
+            )}
+          </View>
+        ) : (
+          <Text style={styles.muted}>
+            {report.status === 'pending' ? 'Verifikasi laporan terlebih dahulu sebelum menilai prioritas.' : 'Penilaian prioritas belum tersedia pada status ini.'}
+          </Text>
+        )}
+
+        <Text style={styles.sectionTitle}>Penugasan petugas</Text>
+        {assignment ? (
+          <View style={styles.card}>
+            <View style={styles.scoreRow}><Text style={styles.scoreLabel}>Petugas</Text><Text style={styles.scoreValue}>{assignedOfficerName}</Text></View>
+            <View style={styles.scoreRow}><Text style={styles.scoreLabel}>Ditugaskan</Text><Text style={styles.scoreValue}>{formatDateTime(assignment.waktu_penugasan)}</Text></View>
+            <Text style={styles.muted}>Satu laporan hanya ditangani oleh satu petugas.</Text>
+          </View>
+        ) : canAssign ? (
+          <View style={styles.actionBox}>
+            {!assignmentOpen ? (
+              <>
+                <Text style={styles.hint}>Pilih satu petugas lapangan untuk menangani laporan ini. Status akan berubah menjadi Ditugaskan.</Text>
+                <TouchableOpacity style={[styles.actionButton, styles.confirmButton]} onPress={() => void openAssignmentForm()}>
+                  <Text style={styles.confirmText}>Tugaskan petugas</Text>
+                </TouchableOpacity>
+              </>
+            ) : (
+              <View>
+                <Text style={styles.actionTitle}>Pilih petugas</Text>
+                {loadingOfficers ? <ActivityIndicator color="#1976D2" /> : officers.length === 0 ? (
+                  <Text style={styles.muted}>Belum ada akun petugas. Minta admin membuat akun petugas terlebih dahulu.</Text>
+                ) : (
+                  <View style={styles.officerList}>
+                    {officers.map((officer) => (
+                      <TouchableOpacity
+                        key={officer.id}
+                        style={[styles.officerChip, selectedOfficer === officer.id && styles.officerChipActive]}
+                        onPress={() => setSelectedOfficer(officer.id)}
+                        disabled={savingAssignment}
+                      >
+                        <Text style={[styles.officerText, selectedOfficer === officer.id && styles.officerTextActive]}>{officer.nama}</Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                )}
+                {!!assignmentError && <Text style={styles.actionError}>{assignmentError}</Text>}
+                <View style={styles.actionRow}>
+                  <TouchableOpacity style={[styles.actionButton, styles.cancelButton]} onPress={() => setAssignmentOpen(false)} disabled={savingAssignment}>
+                    <Text style={styles.cancelText}>Batal</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[styles.actionButton, styles.confirmButton, (savingAssignment || officers.length === 0) && styles.disabled]}
+                    onPress={() => void submitAssignment()}
+                    disabled={savingAssignment || officers.length === 0}
+                  >
+                    {savingAssignment ? <ActivityIndicator color="#fff" /> : <Text style={styles.confirmText}>Tugaskan</Text>}
+                  </TouchableOpacity>
+                </View>
+              </View>
+            )}
+          </View>
+        ) : (
+          <Text style={styles.muted}>
+            {report.status === 'pending'
+              ? 'Verifikasi laporan dan tetapkan prioritas sebelum menugaskan petugas.'
+              : report.status === 'verified'
+                ? 'Tetapkan prioritas terlebih dahulu sebelum menugaskan petugas.'
+                : assignment ? '' : 'Penugasan tidak dapat dilakukan pada status ini.'}
+          </Text>
+        )}
+
         {infoRequests.length > 0 && (
           <>
             <Text style={styles.sectionTitle}>Permintaan informasi tambahan</Text>
@@ -350,6 +722,35 @@ const styles = StyleSheet.create({
   timelineDot: { width: 11, height: 11, borderRadius: 6, backgroundColor: '#1976D2', marginTop: 4, marginRight: 11 },
   timelineContent: { flex: 1, backgroundColor: '#fff', padding: 12, borderRadius: 9, borderWidth: 1, borderColor: '#E2E8F0' },
   historyStatus: { color: '#1E293B', fontWeight: '700', marginBottom: 5 },
+  scoreRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12, paddingVertical: 6 },
+  scoreLabel: { color: '#475569', fontSize: 13, flexShrink: 1 },
+  scoreValue: { color: '#1E293B', fontSize: 13, fontWeight: '700', textAlign: 'right' },
+  finalPriority: { marginTop: 10, padding: 12, borderRadius: 9 },
+  finalPriorityLabel: { color: '#475569', fontSize: 12 },
+  finalPriorityValue: { fontSize: 17, fontWeight: '800', marginTop: 4 },
+  criteriaBlock: { marginTop: 12 },
+  criteriaLabel: { color: '#334155', fontSize: 13, fontWeight: '700', marginBottom: 7 },
+  criteriaOptions: { flexDirection: 'row', gap: 7 },
+  criteriaChip: { flex: 1, borderWidth: 1, borderColor: '#CBD5E1', borderRadius: 8, paddingVertical: 10, alignItems: 'center', backgroundColor: '#fff' },
+  criteriaChipActive: { backgroundColor: '#1976D2', borderColor: '#1976D2' },
+  criteriaChipText: { color: '#334155', fontWeight: '700' },
+  criteriaChipTextActive: { color: '#fff' },
+  previewBox: { backgroundColor: '#EAF3FF', borderRadius: 9, padding: 12, marginTop: 14 },
+  previewLabel: { color: '#475569', fontSize: 13, lineHeight: 20 },
+  previewValue: { color: '#1259A7', fontSize: 24, fontWeight: '800', marginBottom: 4 },
+  overrideWarning: { color: '#9C4221', fontSize: 12, lineHeight: 18, marginTop: 8, fontWeight: '600' },
+  overrideNote: { color: '#9C4221', fontSize: 12, lineHeight: 18, marginTop: 6 },
+  priorityChoices: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 2 },
+  priorityChip: { borderWidth: 1, borderColor: '#CBD5E1', borderRadius: 18, paddingHorizontal: 13, paddingVertical: 9, backgroundColor: '#fff' },
+  priorityChipText: { color: '#334155', fontSize: 12, fontWeight: '600' },
+  overrideInputBox: { marginTop: 14 },
+  overrideInput: { backgroundColor: '#F8FAFC', borderWidth: 1, borderColor: '#CBD5E1', borderRadius: 9, padding: 12, minHeight: 80, textAlignVertical: 'top', color: '#1E293B' },
+  overrideHint: { color: '#64748B', fontSize: 12, marginTop: 6, lineHeight: 18 },
+  officerList: { gap: 8, marginVertical: 6 },
+  officerChip: { borderWidth: 1, borderColor: '#CBD5E1', borderRadius: 9, padding: 12, backgroundColor: '#fff' },
+  officerChipActive: { borderColor: '#1976D2', backgroundColor: '#EAF3FF' },
+  officerText: { color: '#334155' },
+  officerTextActive: { color: '#1259A7', fontWeight: '700' },
   button: { backgroundColor: '#1976D2', paddingHorizontal: 18, paddingVertical: 12, borderRadius: 9, marginTop: 16 },
   buttonText: { color: '#fff', fontWeight: '700' },
   backLink: { color: '#1976D2', fontWeight: '700', marginTop: 16 },
