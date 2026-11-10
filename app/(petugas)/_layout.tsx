@@ -24,12 +24,8 @@ export default function PetugasLayout() {
 
   return (
     <Stack>
-      <Stack.Screen
-        name="beranda"
-        options={{
-          title: 'Daftar Tugas',
-        }}
-      />
+      <Stack.Screen name="beranda" options={{ title: 'Daftar Tugas' }} />
+      <Stack.Screen name="detail/[id]" options={{ title: 'Detail Tugas' }} />
     </Stack>
   );
 }
