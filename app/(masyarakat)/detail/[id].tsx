@@ -4,6 +4,8 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
 import { priorityMeta, describeError } from '@/lib/laporan-ui';
+import { fetchPublishedRab, type RabWithVersion } from '@/lib/rab';
+import { RabPanel } from '@/components/RabPanel';
 import type { StatusLaporanType, TingkatType } from '@/types';
 
 type ReportDetail = {
@@ -47,6 +49,7 @@ export default function DetailLaporanScreen() {
   const [history, setHistory] = useState<HistoryEntry[]>([]);
   const [photos, setPhotos] = useState<PhotoPreview[]>([]);
   const [priority, setPriority] = useState<PriorityPreview | null>(null);
+  const [rab, setRab] = useState<RabWithVersion | null>(null);
   const [infoRequests, setInfoRequests] = useState<InfoRequest[]>([]);
   const [answerDrafts, setAnswerDrafts] = useState<Record<string, string>>({});
   const [submittingAnswerId, setSubmittingAnswerId] = useState('');
@@ -104,6 +107,13 @@ export default function DetailLaporanScreen() {
         .order('created_at', { ascending: true });
       if (infoErrorResult) throw infoErrorResult;
 
+      let rabData: RabWithVersion | null = null;
+      try {
+        rabData = await fetchPublishedRab(id);
+      } catch (rabError) {
+        console.warn('[DetailLaporan] RAB unavailable:', rabError);
+      }
+
       const photoRows = (photoData ?? []) as PhotoEntry[];
       const previews = await Promise.all(photoRows.map(async (photo) => {
         const { data, error } = await supabase.storage.from(BUCKET).createSignedUrl(photo.path, 60 * 30);
@@ -118,6 +128,7 @@ export default function DetailLaporanScreen() {
       setHistory((historyData ?? []) as HistoryEntry[]);
       setPhotos(previews);
       setPriority((priorityData as unknown as PriorityPreview) ?? null);
+      setRab(rabData);
       setInfoRequests((infoData ?? []) as InfoRequest[]);
     } catch (error) {
       console.error('[DetailLaporan] Failed to load report detail:', error);
@@ -226,6 +237,9 @@ export default function DetailLaporanScreen() {
       ) : (
         <Text style={styles.muted}>Prioritas belum ditetapkan. Admin akan menilai setelah laporan diverifikasi.</Text>
       )}
+
+      <Text style={styles.sectionTitle}>Rencana Anggaran Biaya (RAB)</Text>
+      <RabPanel data={rab} />
 
       {infoRequests.length > 0 && (
         <>

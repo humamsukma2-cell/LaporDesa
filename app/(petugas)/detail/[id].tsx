@@ -15,35 +15,28 @@ import * as ImagePicker from 'expo-image-picker';
 import * as ImageManipulator from 'expo-image-manipulator';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { supabase } from '@/lib/supabase';
-import {
-  categoryName,
-  describeError,
-  formatDateTime,
-  priorityMeta,
-  statusMeta,
-} from '@/lib/laporan-ui';
+import { describeError, formatDateTime, priorityMeta, statusMeta } from '@/lib/laporan-ui';
+import { fetchPublishedRab, type RabWithVersion } from '@/lib/rab';
+import { RabPanel } from '@/components/RabPanel';
 import type { StatusLaporanType, TingkatType } from '@/types';
 
 type TaskDetail = {
   id: string;
   kode_laporan: string;
-  pelapor_id: string;
   deskripsi: string;
   urgensi_pelapor: TingkatType;
+  patokan_lokasi: string;
   latitude: number | null;
   longitude: number | null;
   akurasi_gps: number | null;
-  patokan_lokasi: string;
   status: StatusLaporanType;
   created_at: string;
-  kategori: { nama: string } | { nama: string }[] | null;
 };
 type HistoryEntry = { id: string; status_lama: StatusLaporanType | null; status_baru: StatusLaporanType; catatan: string | null; waktu: string };
 type PhotoEntry = { id: string; path: string; jenis: string };
 type PhotoPreview = PhotoEntry & { url: string };
-type PriorityInfo = { skor_rekomendasi: number; prioritas_akhir: TingkatType; created_at: string; catatan_override: string | null };
+type PriorityInfo = { skor_rekomendasi: number; prioritas_akhir: TingkatType; created_at: string };
 type PickedPhoto = { uri: string };
-
 const BUCKET = 'foto-laporan';
 const MAX_RESULT_PHOTOS = 3;
 const URGENCY_LABEL: Record<TingkatType, string> = { rendah: 'Rendah', sedang: 'Sedang', tinggi: 'Tinggi', sangat_tinggi: 'Sangat tinggi' };
@@ -57,6 +50,7 @@ export default function DetailTugasPetugasScreen() {
   const [history, setHistory] = useState<HistoryEntry[]>([]);
   const [photos, setPhotos] = useState<PhotoPreview[]>([]);
   const [priority, setPriority] = useState<PriorityInfo | null>(null);
+  const [rab, setRab] = useState<RabWithVersion | null>(null);
   const [loading, setLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState('');
   const [successMessage, setSuccessMessage] = useState('');
@@ -76,7 +70,7 @@ export default function DetailTugasPetugasScreen() {
     try {
       const { data: taskData, error: taskError } = await supabase
         .from('laporan')
-        .select('id, kode_laporan, pelapor_id, deskripsi, urgensi_pelapor, latitude, longitude, akurasi_gps, patokan_lokasi, status, created_at, kategori(nama)')
+        .select('id, kode_laporan, deskripsi, urgensi_pelapor, latitude, longitude, akurasi_gps, patokan_lokasi, status, created_at')
         .eq('id', id)
         .maybeSingle();
       if (taskError) throw taskError;
@@ -86,10 +80,11 @@ export default function DetailTugasPetugasScreen() {
         return;
       }
 
-      const [historyResult, photoResult, priorityResult] = await Promise.all([
+      const [historyResult, photoResult, priorityResult, rabResult] = await Promise.all([
         supabase.from('riwayat_status').select('id, status_lama, status_baru, catatan, waktu').eq('laporan_id', id).order('waktu', { ascending: true }),
         supabase.from('foto_laporan').select('id, path, jenis').eq('laporan_id', id).order('uploaded_at', { ascending: true }),
-        supabase.from('penilaian_prioritas').select('skor_rekomendasi, prioritas_akhir, created_at, catatan_override').eq('laporan_id', id).maybeSingle(),
+        supabase.from('penilaian_prioritas').select('skor_rekomendasi, prioritas_akhir, created_at').eq('laporan_id', id).maybeSingle(),
+        fetchPublishedRab(id),
       ]);
       if (historyResult.error) throw historyResult.error;
       if (photoResult.error) throw photoResult.error;
@@ -109,6 +104,7 @@ export default function DetailTugasPetugasScreen() {
       setHistory((historyResult.data ?? []) as HistoryEntry[]);
       setPhotos(previews);
       setPriority((priorityResult.data as unknown as PriorityInfo) ?? null);
+      setRab(rabResult ?? null);
     } catch (error) {
       console.error('[DetailTugas] Failed to load task detail:', error);
       setErrorMessage(describeError(error));
@@ -143,7 +139,7 @@ export default function DetailTugasPetugasScreen() {
     try {
       const { error } = await supabase.rpc('ubah_status_tugas', { p_laporan_id: id, p_status: 'in_progress' });
       if (error) throw error;
-      showFeedback('Pekerjaan dimulai. Unggah foto hasil setelah perbaikan selesai.');
+      showFeedback('Pekerjaan dimulai.');
       await loadDetail();
     } catch (error) {
       console.error('[DetailTugas] Failed to start work:', error);
@@ -173,13 +169,13 @@ export default function DetailTugasPetugasScreen() {
 
   async function pickResultPhotos() {
     if (remainingResultSlots <= 0) {
-      showFailure(`Maksimal ${MAX_RESULT_PHOTOS} foto hasil untuk satu laporan.`);
+      showFailure(`Maksimal ${MAX_RESULT_PHOTOS} foto hasil.`);
       return;
     }
     try {
       const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
       if (!permission.granted) {
-        showFailure('Izinkan akses galeri untuk mengunggah foto hasil penanganan.');
+        showFailure('Izinkan akses galeri.');
         return;
       }
       const result = await ImagePicker.launchImageLibraryAsync({
@@ -200,24 +196,18 @@ export default function DetailTugasPetugasScreen() {
   async function uploadResultPhotos() {
     if (!id) return;
     if (resultPhotos.length + pickedPhotos.length === 0) {
-      showFailure('Pilih minimal satu foto hasil penanganan.');
+      showFailure('Pilih minimal satu foto hasil.');
       return;
     }
     if (!task || !['assigned', 'in_progress'].includes(task.status)) {
-      showFailure('Foto hasil hanya dapat diunggah saat tugas aktif.');
+      showFailure('Foto hasil hanya saat tugas aktif.');
       return;
     }
     setUploading(true);
     setActionError('');
     setSuccessMessage('');
-    const uploadedPaths: string[] = [];
     try {
-      const rows: { laporan_id: string; path: string; jenis: 'hasil_penanganan'; uploaded_by: string }[] = [];
-      const { data: userData, error: userError } = await supabase.auth.getUser();
-      if (userError) throw userError;
-      const userId = userData.user?.id;
-      if (!userId) throw new Error('Sesi login tidak tersedia.');
-
+      const rows: { laporan_id: string; path: string; jenis: 'hasil_penanganan' }[] = [];
       for (let index = 0; index < pickedPhotos.length; index += 1) {
         const compressed = await ImageManipulator.manipulateAsync(
           pickedPhotos[index].uri,
@@ -225,30 +215,21 @@ export default function DetailTugasPetugasScreen() {
           { compress: 0.72, format: ImageManipulator.SaveFormat.JPEG }
         );
         const response = await fetch(compressed.uri);
-        if (!response.ok) throw new Error('Foto tidak dapat dibaca dari perangkat.');
+        if (!response.ok) throw new Error('Foto tidak dapat dibaca.');
         const blob = await response.blob();
-        if (blob.size > 5 * 1024 * 1024) throw new Error('Satu foto hasil melebihi 5 MB setelah dikompres.');
+        if (blob.size > 5 * 1024 * 1024) throw new Error('Satu foto > 5 MB.');
         const path = `${id}/hasil-${Date.now()}-${index}.jpg`;
-        const { error: uploadError } = await supabase.storage
-          .from(BUCKET)
-          .upload(path, blob, { contentType: 'image/jpeg', upsert: false });
+        const { error: uploadError } = await supabase.storage.from(BUCKET).upload(path, blob, { contentType: 'image/jpeg', upsert: false });
         if (uploadError) throw uploadError;
-        uploadedPaths.push(path);
-        rows.push({ laporan_id: id, path, jenis: 'hasil_penanganan', uploaded_by: userId });
+        rows.push({ laporan_id: id, path, jenis: 'hasil_penanganan' });
       }
-
       const { error: insertError } = await supabase.from('foto_laporan').insert(rows);
       if (insertError) throw insertError;
-
       setPickedPhotos([]);
-      showFeedback('Foto hasil penanganan berhasil diunggah.');
+      showFeedback('Foto hasil berhasil diunggah.');
       await loadDetail();
     } catch (error) {
-      console.error('[DetailTugas] Failed to upload result photos:', error);
-      if (uploadedPaths.length > 0) {
-        const { error: removeError } = await supabase.storage.from(BUCKET).remove(uploadedPaths);
-        if (removeError) console.error('[DetailTugas] Cleanup failed:', removeError);
-      }
+      console.error('[DetailTugas] Failed to upload:', error);
       showFailure(describeError(error));
     } finally {
       setUploading(false);
@@ -256,24 +237,25 @@ export default function DetailTugasPetugasScreen() {
   }
 
   async function openCoordinates() {
-    if (task?.latitude == null || task.longitude == null) return;
+    if (!task?.latitude || !task?.longitude) return;
     const url = `https://www.google.com/maps/search/?api=1&query=${task.latitude},${task.longitude}`;
     try {
       const supported = await Linking.canOpenURL(url);
       if (supported) await Linking.openURL(url);
-      else showFailure('Aplikasi untuk membuka tautan peta tidak tersedia pada perangkat ini.');
+      else showFailure('Peta tidak tersedia.');
     } catch {
-      showFailure('Gagal membuka tautan peta. Coba lagi.');
+      showFailure('Gagal membuka peta.');
     }
   }
 
-  if (loading) return <View style={styles.center}><ActivityIndicator size="large" color="#1976D2" /><Text style={styles.muted}>Memuat detail tugas…</Text></View>;
+  if (loading) return (
+    <View style={styles.center}><ActivityIndicator size="large" color="#1976D2" /><Text style={styles.muted}>Memuat…</Text></View>
+  );
   if (!task) return (
     <View style={styles.center}>
-      <Text style={styles.errorTitle}>Tugas belum dapat ditampilkan</Text>
-      <Text style={styles.errorText}>{errorMessage || 'Tugas tidak ditemukan.'}</Text>
+      <Text style={styles.errorTitle}>Tugas tidak ditemukan</Text>
+      <Text style={styles.errorText}>{errorMessage}</Text>
       <TouchableOpacity style={styles.button} onPress={() => void loadDetail()}><Text style={styles.buttonText}>Coba lagi</Text></TouchableOpacity>
-      <TouchableOpacity onPress={() => router.back()}><Text style={styles.backLink}>Kembali</Text></TouchableOpacity>
     </View>
   );
 
@@ -287,49 +269,32 @@ export default function DetailTugasPetugasScreen() {
       {!!successMessage && <View style={styles.successBox}><Text style={styles.successText}>{successMessage}</Text></View>}
 
       <Text style={styles.code}>{task.kode_laporan}</Text>
-      <View style={[styles.statusBox, { backgroundColor: status.background }]}>
-        <Text style={styles.statusLabel}>Status tugas</Text>
-        <Text style={[styles.statusValue, { color: status.color }]}>{status.label}</Text>
-      </View>
+      <View style={[styles.statusBox, { backgroundColor: status.background }]}><Text style={styles.statusLabel}>Status tugas</Text><Text style={[styles.statusValue, { color: status.color }]}>{status.label}</Text></View>
 
       <Text style={styles.sectionTitle}>Informasi kerusakan</Text>
-      <Info label="Kategori" value={categoryName(task.kategori)} />
       <Info label="Deskripsi" value={task.deskripsi} />
-      <Info label="Urgensi pelapor" value={URGENCY_LABEL[task.urgensi_pelapor] ?? task.urgensi_pelapor} />
-      <Info label="Patokan lokasi" value={task.patokan_lokasi} />
-      {task.latitude != null && task.longitude != null ? (
-        <View style={styles.card}>
-          <Text style={styles.infoLabel}>Koordinat GPS</Text>
-          <Text style={styles.body}>{task.latitude.toFixed(6)}, {task.longitude.toFixed(6)}</Text>
-          {task.akurasi_gps != null && <Text style={styles.muted}>Akurasi ±{Math.round(task.akurasi_gps)} m</Text>}
-          <TouchableOpacity onPress={() => void openCoordinates()}><Text style={styles.link}>Buka di Maps</Text></TouchableOpacity>
-        </View>
-      ) : <Info label="Lokasi GPS" value="Tidak disertakan pelapor" />}
+      <Info label="Urgensi" value={URGENCY_LABEL[task.urgensi_pelapor] ?? task.urgensi_pelapor} />
+      <Info label="Patokan" value={task.patokan_lokasi} />
+      {task.latitude != null && task.longitude != null && (
+        <View style={styles.card}><Text style={styles.infoLabel}>Koordinat</Text><Text style={styles.body}>{task.latitude.toFixed(6)}, {task.longitude.toFixed(6)}</Text><Text style={styles.muted}>Akurasi ±{Math.round(task.akurasi_gps ?? 0)} m</Text><TouchableOpacity onPress={() => void openCoordinates()}><Text style={styles.link}>Buka di Maps</Text></TouchableOpacity></View>
+      )}
 
       <Text style={styles.sectionTitle}>Prioritas penanganan</Text>
       {priority ? (
-        <View style={styles.card}>
-          <Text style={[styles.priorityValue, { color: priorityMeta(priority.prioritas_akhir).color }]}>{priorityMeta(priority.prioritas_akhir).label}</Text>
-          <Text style={styles.body}>Skor penilaian admin: {Number(priority.skor_rekomendasi).toFixed(2)} dari 5,00</Text>
-          <Text style={styles.muted}>Dinilai {formatDateTime(priority.created_at)}</Text>
-        </View>
-      ) : <Text style={styles.muted}>Prioritas belum ditetapkan admin.</Text>}
+        <View style={styles.card}><Text style={[styles.priorityValue, { color: priorityMeta(priority.prioritas_akhir).color }]}>{priorityMeta(priority.prioritas_akhir).label}</Text><Text style={styles.body}>Skor: {Number(priority.skor_rekomendasi).toFixed(2)} dari 5,00</Text></View>
+      ) : <Text style={styles.muted}>Prioritas belum ditetapkan.</Text>}
 
       <Text style={styles.sectionTitle}>Foto dokumentasi awal</Text>
       {initialPhotos.length === 0 ? <Text style={styles.muted}>Tidak ada foto awal.</Text> : (
         <View style={styles.photoGrid}>{initialPhotos.map((photo) => (
-          <View key={photo.id} style={styles.photoCard}>
-            {photo.url ? <Image source={{ uri: photo.url }} style={styles.photo} resizeMode="cover" /> : <View style={[styles.photo, styles.photoUnavailable]}><Text style={styles.muted}>Foto tidak dapat dimuat</Text></View>}
-          </View>
+          <View key={photo.id} style={styles.photoCard}><Image source={{ uri: photo.url ?? '' }} style={styles.photo} resizeMode="cover" /><Text style={styles.photoCaption}>{photo.jenis === 'dokumentasi_awal' ? 'Awal' : ''}</Text></View>
         ))}</View>
       )}
 
       <Text style={styles.sectionTitle}>Foto hasil penanganan</Text>
-      {resultPhotos.length === 0 ? <Text style={styles.muted}>Belum ada foto hasil. Unggah setelah perbaikan selesai.</Text> : (
+      {resultPhotos.length === 0 ? <Text style={styles.muted}>Belum ada foto hasil.</Text> : (
         <View style={styles.photoGrid}>{resultPhotos.map((photo) => (
-          <View key={photo.id} style={styles.photoCard}>
-            {photo.url ? <Image source={{ uri: photo.url }} style={styles.photo} resizeMode="cover" /> : <View style={[styles.photo, styles.photoUnavailable]}><Text style={styles.muted}>Foto tidak dapat dimuat</Text></View>}
-          </View>
+          <View key={photo.id} style={styles.photoCard}><Image source={{ uri: photo.url ?? '' }} style={styles.photo} resizeMode="cover" /><Text style={styles.photoCaption}>{photo.jenis === 'hasil_penanganan' ? 'Hasil' : ''}</Text></View>
         ))}</View>
       )}
 
@@ -337,7 +302,7 @@ export default function DetailTugasPetugasScreen() {
         <>
           <TouchableOpacity style={styles.secondaryButton} onPress={() => void pickResultPhotos()} disabled={uploading || remainingResultSlots === 0}>
             <Text style={styles.secondaryButtonText}>
-              {remainingResultSlots === 0 ? 'Batas 3 foto hasil tercapai' : `Pilih foto hasil (${pickedPhotos.length} dipilih)`}
+              {remainingResultSlots === 0 ? 'Batas 3 foto hasil' : `Pilih foto hasil (${pickedPhotos.length} dipilih)`}
             </Text>
           </TouchableOpacity>
           {pickedPhotos.length > 0 && (
@@ -361,34 +326,38 @@ export default function DetailTugasPetugasScreen() {
         </TouchableOpacity>
       ) : task.status === 'in_progress' ? (
         <>
-          <TouchableOpacity
-            style={[styles.primaryButton, (!canResolve || updating) && styles.disabled]}
-            onPress={() => void resolveWork()}
-            disabled={!canResolve || updating}
-          >
+          <TouchableOpacity style={[styles.primaryButton, (!canResolve || updating) && styles.disabled]} onPress={() => void resolveWork()} disabled={!canResolve || updating}>
             {updating ? <ActivityIndicator color="#fff" /> : <Text style={styles.primaryButtonText}>Tandai selesai</Text>}
           </TouchableOpacity>
-          {!canResolve && <Text style={styles.hint}>Unggah minimal satu foto hasil penanganan sebelum menandai selesai.</Text>}
+          {!canResolve && <Text style={styles.hint}>Unggah foto hasil terlebih dahulu.</Text>}
         </>
       ) : task.status === 'resolved' ? (
-        <Text style={styles.muted}>Tugas ini sudah selesai. Terima kasih atas penanganannya.</Text>
+        <Text style={styles.muted}>Tugas ini sudah selesai.</Text>
       ) : (
-        <Text style={styles.muted}>Tidak ada tindakan yang tersedia pada status ini.</Text>
+        <Text style={styles.muted}>Tidak ada tindakan.</Text>
       )}
 
       <Text style={styles.sectionTitle}>Riwayat status</Text>
-      {history.length === 0 ? <Text style={styles.muted}>Belum ada riwayat status.</Text> : history.map((entry) => (
-        <View key={entry.id} style={styles.timelineItem}>
-          <View style={styles.timelineDot} />
-          <View style={styles.timelineContent}>
-            <Text style={styles.historyStatus}>
-              {entry.status_lama ? `${statusMeta(entry.status_lama).label} → ` : ''}{statusMeta(entry.status_baru).label}
-            </Text>
-            <Text style={styles.muted}>{formatDateTime(entry.waktu)}</Text>
-            {!!entry.catatan && <Text style={styles.body}>{entry.catatan}</Text>}
+      {history.length === 0 ? (
+        <Text style={styles.muted}>Belum ada riwayat.</Text>
+      ) : (
+        history.map((entry) => (
+          <View key={entry.id} style={styles.timelineItem}>
+            <View style={styles.timelineDot} />
+            <View style={styles.timelineContent}>
+              <Text style={styles.historyStatus}>
+                {entry.status_lama ? `${statusMeta(entry.status_lama).label} → ` : ''}
+                {statusMeta(entry.status_baru).label}
+              </Text>
+              <Text style={styles.muted}>{formatDateTime(entry.waktu)}</Text>
+              {entry.catatan ? <Text style={styles.body}>{entry.catatan}</Text> : null}
+            </View>
           </View>
-        </View>
-      ))}
+        ))
+      )}
+
+      <Text style={styles.sectionTitle}>RAB</Text>
+      <RabPanel data={rab} />
     </ScrollView>
   );
 }
@@ -407,14 +376,13 @@ const styles = StyleSheet.create({
   statusValue: { fontSize: 17, fontWeight: '800', marginTop: 4 },
   sectionTitle: { color: '#1E293B', fontWeight: '800', fontSize: 17, marginTop: 24, marginBottom: 10 },
   card: { backgroundColor: '#fff', padding: 13, borderRadius: 9, marginBottom: 8, borderWidth: 1, borderColor: '#E2E8F0' },
-  infoLabel: { color: '#64748B', fontSize: 12, marginBottom: 5 },
+  infoLabel: { color: '#64748B', fontSize: 12, marginBottom: 5, marginTop: 6 },
   body: { color: '#334155', fontSize: 14, lineHeight: 21 },
-  link: { color: '#1976D2', fontWeight: '700', marginTop: 9 },
-  priorityValue: { fontSize: 19, fontWeight: '800', marginBottom: 4 },
   photoGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
   photoCard: { width: '48%', backgroundColor: '#fff', padding: 6, borderRadius: 9 },
   photo: { width: '100%', aspectRatio: 1, borderRadius: 6 },
   photoUnavailable: { alignItems: 'center', justifyContent: 'center', padding: 8 },
+  photoCaption: { color: '#475569', fontSize: 12, margin: 6 },
   pickedRow: { flexDirection: 'row', gap: 8, marginTop: 8 },
   pickedPhoto: { width: 64, height: 64, borderRadius: 6 },
   secondaryButton: { borderWidth: 1, borderColor: '#1976D2', borderRadius: 9, padding: 13, alignItems: 'center', backgroundColor: '#fff', marginTop: 10 },
@@ -432,9 +400,10 @@ const styles = StyleSheet.create({
   muted: { color: '#64748B', fontSize: 13, lineHeight: 20, marginTop: 6 },
   timelineItem: { flexDirection: 'row', marginBottom: 16 },
   timelineDot: { width: 11, height: 11, borderRadius: 6, backgroundColor: '#1976D2', marginTop: 4, marginRight: 11 },
+  link: { color: '#1976D2', fontWeight: '700', marginTop: 8 },
+  priorityValue: { fontSize: 19, fontWeight: '800', marginBottom: 5 },
   timelineContent: { flex: 1, backgroundColor: '#fff', padding: 12, borderRadius: 9, borderWidth: 1, borderColor: '#E2E8F0' },
   historyStatus: { color: '#1E293B', fontWeight: '700', marginBottom: 5 },
   button: { backgroundColor: '#1976D2', paddingHorizontal: 18, paddingVertical: 12, borderRadius: 9, marginTop: 16 },
   buttonText: { color: '#fff', fontWeight: '700' },
-  backLink: { color: '#1976D2', fontWeight: '700', marginTop: 16 },
 });

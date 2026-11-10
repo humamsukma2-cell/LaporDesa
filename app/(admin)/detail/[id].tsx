@@ -26,6 +26,7 @@ import {
   statusMeta,
 } from '@/lib/laporan-ui';
 import type { KonfigurasiPrioritas } from '@/lib/laporan-ui';
+import { fetchRabForAdmin, type RabForAdmin } from '@/lib/rab';
 import type { StatusLaporanType, TingkatType } from '@/types';
 
 type ReportDetail = {
@@ -100,6 +101,7 @@ export default function DetailLaporanAdminScreen() {
   const [config, setConfig] = useState<KonfigurasiPrioritas>(DEFAULT_KONFIGURASI_PRIORITAS);
   const [priority, setPriority] = useState<PriorityRow | null>(null);
   const [assignment, setAssignment] = useState<AssignmentRow | null>(null);
+  const [rab, setRab] = useState<RabForAdmin | null>(null);
   const [priorityFormOpen, setPriorityFormOpen] = useState(false);
   const [criteria, setCriteria] = useState<Criteria>({ bahaya: 3, dampak: 3, keparahan: 3, frekuensi: 3 });
   const [finalPriority, setFinalPriority] = useState<TingkatType>('sedang');
@@ -135,13 +137,14 @@ export default function DetailLaporanAdminScreen() {
         return;
       }
 
-      const [historyResult, photoResult, infoResult, priorityResult, assignmentResult, configResult] = await Promise.all([
+      const [historyResult, photoResult, infoResult, priorityResult, assignmentResult, configResult, rabResult] = await Promise.all([
         supabase.from('riwayat_status').select('id, status_lama, status_baru, catatan, waktu').eq('laporan_id', id).order('waktu', { ascending: true }),
         supabase.from('foto_laporan').select('id, path, jenis').eq('laporan_id', id).order('uploaded_at', { ascending: true }),
         supabase.from('informasi_tambahan').select('id, permintaan, jawaban, created_at, dijawab_pada').eq('laporan_id', id).order('created_at', { ascending: true }),
         supabase.from('penilaian_prioritas').select('tingkat_bahaya, dampak_masyarakat, tingkat_keparahan, frekuensi_laporan, skor_rekomendasi, prioritas_akhir, created_at, catatan_override').eq('laporan_id', id).maybeSingle(),
         supabase.from('penugasan').select('id, petugas_id, waktu_penugasan, petugas:profiles!penugasan_petugas_id_fkey(nama)').eq('laporan_id', id).maybeSingle(),
         supabase.from('konfigurasi_prioritas').select('bobot_bahaya, bobot_dampak, bobot_keparahan, bobot_frekuensi, ambang_rendah_max, ambang_sedang_max, ambang_tinggi_max').eq('id', 1).maybeSingle(),
+        fetchRabForAdmin(id),
       ]);
       if (historyResult.error) throw historyResult.error;
       if (photoResult.error) throw photoResult.error;
@@ -181,6 +184,7 @@ export default function DetailLaporanAdminScreen() {
       setInfoRequests((infoResult.data ?? []) as InfoRequest[]);
       setPriority((priorityResult.data as unknown as PriorityRow) ?? null);
       setAssignment((assignmentResult.data as unknown as AssignmentRow) ?? null);
+      setRab(rabResult);
     } catch (error) {
       console.error('[DetailAdmin] Failed to load report detail:', error);
       setErrorMessage(describeError(error));
@@ -652,6 +656,24 @@ export default function DetailLaporanAdminScreen() {
             ))}
           </>
         )}
+
+        <Text style={styles.sectionTitle}>RAB (Rencana Anggaran Biaya)</Text>
+        {rab ? (
+          <View style={styles.card}>
+            <Text style={styles.body}>Nomor: {rab.rab.nomor_rab} · {rab.rab.status === 'published' ? 'Published' : 'Draft'}</Text>
+            <Text style={styles.body}>Judul: {rab.rab.judul}</Text>
+            <TouchableOpacity style={[styles.actionButton, styles.confirmButton]} onPress={() => router.push({ pathname: '/(admin)/kelola-rab/[id]', params: { id: report.id } })}>
+              <Text style={styles.confirmText}>{rab.rab.status === 'published' ? 'Kelola / revisi RAB' : 'Lanjutkan RAB'}</Text>
+            </TouchableOpacity>
+          </View>
+        ) : report.status === 'verified' || report.status === 'assigned' || report.status === 'in_progress' || report.status === 'resolved' ? (
+          <View style={styles.actionBox}>
+            <Text style={styles.hint}>Belum ada RAB untuk laporan ini.</Text>
+            <TouchableOpacity style={[styles.actionButton, styles.confirmButton]} onPress={() => router.push({ pathname: '/(admin)/kelola-rab/[id]', params: { id: report.id } })}>
+              <Text style={styles.confirmText}>Buat RAB</Text>
+            </TouchableOpacity>
+          </View>
+        ) : <Text style={styles.muted}>RAB dapat dibuat setelah laporan diverifikasi.</Text>}
 
         <Text style={styles.sectionTitle}>Riwayat status</Text>
         {history.length === 0 ? <Text style={styles.muted}>Belum ada riwayat status.</Text> : history.map((entry) => (
