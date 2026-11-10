@@ -46,8 +46,8 @@ export default function MasyarakatLayout() {
       <Tabs.Screen
         name="buat-laporan"
         options={{
-          href: null, // Hide from tab bar
           title: 'Buat Laporan',
+          headerTitle: 'Buat Laporan',
         }}
       />
       <Tabs.Screen
