@@ -1,9 +1,9 @@
 import React, { useCallback, useState } from 'react';
-import { ActivityIndicator, Image, Linking, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Image, Linking, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
-import { priorityMeta } from '@/lib/laporan-ui';
+import { priorityMeta, describeError } from '@/lib/laporan-ui';
 import type { StatusLaporanType, TingkatType } from '@/types';
 
 type ReportDetail = {
@@ -24,6 +24,7 @@ type HistoryEntry = { id: string; status_lama: StatusLaporanType | null; status_
 type PhotoEntry = { id: string; path: string; jenis: string };
 type PhotoPreview = PhotoEntry & { url: string };
 type PriorityPreview = { skor_rekomendasi: number; prioritas_akhir: TingkatType; created_at: string; catatan_override: string | null };
+type InfoRequest = { id: string; permintaan: string; jawaban: string | null; created_at: string; dijawab_pada: string | null };
 
 const STATUS: Record<StatusLaporanType, string> = {
   pending: 'Menunggu verifikasi', needs_information: 'Perlu informasi', verified: 'Terverifikasi',
@@ -46,6 +47,11 @@ export default function DetailLaporanScreen() {
   const [history, setHistory] = useState<HistoryEntry[]>([]);
   const [photos, setPhotos] = useState<PhotoPreview[]>([]);
   const [priority, setPriority] = useState<PriorityPreview | null>(null);
+  const [infoRequests, setInfoRequests] = useState<InfoRequest[]>([]);
+  const [answerDrafts, setAnswerDrafts] = useState<Record<string, string>>({});
+  const [submittingAnswerId, setSubmittingAnswerId] = useState('');
+  const [infoError, setInfoError] = useState('');
+  const [infoSuccess, setInfoSuccess] = useState('');
   const [loading, setLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState('');
 
@@ -91,6 +97,13 @@ export default function DetailLaporanScreen() {
         .maybeSingle();
       if (priorityError) throw priorityError;
 
+      const { data: infoData, error: infoErrorResult } = await supabase
+        .from('informasi_tambahan')
+        .select('id, permintaan, jawaban, created_at, dijawab_pada')
+        .eq('laporan_id', id)
+        .order('created_at', { ascending: true });
+      if (infoErrorResult) throw infoErrorResult;
+
       const photoRows = (photoData ?? []) as PhotoEntry[];
       const previews = await Promise.all(photoRows.map(async (photo) => {
         const { data, error } = await supabase.storage.from(BUCKET).createSignedUrl(photo.path, 60 * 30);
@@ -105,6 +118,7 @@ export default function DetailLaporanScreen() {
       setHistory((historyData ?? []) as HistoryEntry[]);
       setPhotos(previews);
       setPriority((priorityData as unknown as PriorityPreview) ?? null);
+      setInfoRequests((infoData ?? []) as InfoRequest[]);
     } catch (error) {
       console.error('[DetailLaporan] Failed to load report detail:', error);
       setErrorMessage(error instanceof Error ? error.message : 'Gagal memuat detail laporan.');
@@ -114,6 +128,36 @@ export default function DetailLaporanScreen() {
   }, [id, session?.user.id]);
 
   React.useEffect(() => { void loadDetail(); }, [loadDetail]);
+
+  async function submitAnswer(requestId: string) {
+    const draft = (answerDrafts[requestId] ?? '').trim();
+    if (!draft) {
+      setInfoError('Jawaban wajib diisi sebelum dikirim.');
+      return;
+    }
+    setSubmittingAnswerId(requestId);
+    setInfoError('');
+    setInfoSuccess('');
+    try {
+      const { error } = await supabase.rpc('jawab_informasi_tambahan', {
+        p_permintaan_id: requestId,
+        p_jawaban: draft,
+      });
+      if (error) throw error;
+      setAnswerDrafts((current) => {
+        const next = { ...current };
+        delete next[requestId];
+        return next;
+      });
+      setInfoSuccess('Jawaban berhasil dikirim. Laporan kembali menunggu verifikasi admin.');
+      await loadDetail();
+    } catch (error) {
+      console.error('[DetailLaporan] Failed to answer information request:', error);
+      setInfoError(describeError(error));
+    } finally {
+      setSubmittingAnswerId('');
+    }
+  }
 
   async function openCoordinates() {
     if (report?.latitude == null || report.longitude == null) return;
@@ -136,6 +180,11 @@ export default function DetailLaporanScreen() {
       {!!errorMessage && <View style={styles.inlineError}><Text style={styles.errorText}>{errorMessage}</Text></View>}
       <Text style={styles.code}>{report.kode_laporan}</Text>
       <View style={styles.statusBox}><Text style={styles.statusLabel}>Status saat ini</Text><Text style={styles.statusValue}>{STATUS[report.status] ?? report.status}</Text></View>
+      {report.status === 'needs_information' && (
+        <View style={styles.warningBox}>
+          <Text style={styles.warningText}>Admin meminta informasi tambahan. Lengkapi jawaban pada bagian “Permintaan informasi dari admin” di bawah.</Text>
+        </View>
+      )}
 
       <Text style={styles.sectionTitle}>Informasi laporan</Text>
       <Info label="Kategori" value={(Array.isArray(report.kategori) ? report.kategori[0]?.nama : report.kategori?.nama) ?? 'Tidak tersedia'} />
@@ -178,6 +227,51 @@ export default function DetailLaporanScreen() {
         <Text style={styles.muted}>Prioritas belum ditetapkan. Admin akan menilai setelah laporan diverifikasi.</Text>
       )}
 
+      {infoRequests.length > 0 && (
+        <>
+          <Text style={styles.sectionTitle}>Permintaan informasi dari admin</Text>
+          {!!infoError && <View style={styles.inlineError}><Text style={styles.errorText}>{infoError}</Text></View>}
+          {!!infoSuccess && <View style={styles.successBox}><Text style={styles.successText}>{infoSuccess}</Text></View>}
+          {infoRequests.map((request) => (
+            <View key={request.id} style={styles.requestBox}>
+              <Text style={styles.requestMeta}>Diminta {formatDate(request.created_at)}</Text>
+              <Text style={styles.body}>{request.permintaan}</Text>
+              {request.jawaban ? (
+                <View style={styles.answerBox}>
+                  <Text style={styles.infoLabel}>Jawaban Anda</Text>
+                  <Text style={styles.body}>{request.jawaban}</Text>
+                  {!!request.dijawab_pada && <Text style={styles.muted}>Dikirim {formatDate(request.dijawab_pada)}</Text>}
+                </View>
+              ) : report.status === 'needs_information' ? (
+                <View>
+                  <Text style={styles.infoLabel}>Jawaban Anda (wajib)</Text>
+                  <TextInput
+                    style={styles.answerInput}
+                    value={answerDrafts[request.id] ?? ''}
+                    onChangeText={(text) => setAnswerDrafts((current) => ({ ...current, [request.id]: text }))}
+                    placeholder="Tuliskan informasi yang diminta admin"
+                    multiline
+                    maxLength={1500}
+                    editable={submittingAnswerId !== request.id}
+                  />
+                  <TouchableOpacity
+                    style={[styles.answerButton, submittingAnswerId === request.id && styles.answerButtonDisabled]}
+                    onPress={() => void submitAnswer(request.id)}
+                    disabled={submittingAnswerId === request.id}
+                  >
+                    {submittingAnswerId === request.id
+                      ? <ActivityIndicator color="#fff" />
+                      : <Text style={styles.answerButtonText}>Kirim jawaban</Text>}
+                  </TouchableOpacity>
+                </View>
+              ) : (
+                <Text style={styles.muted}>Belum dijawab. Permintaan hanya dapat dijawab saat status laporan “Perlu informasi”.</Text>
+              )}
+            </View>
+          ))}
+        </>
+      )}
+
       <Text style={styles.sectionTitle}>Riwayat status</Text>
       {history.length === 0 ? <Text style={styles.muted}>Riwayat status belum tersedia.</Text> : history.map((entry) => (
         <View key={entry.id} style={styles.timelineItem}>
@@ -212,6 +306,17 @@ const styles = StyleSheet.create({
   locationBox: { backgroundColor: '#fff', padding: 13, borderRadius: 9, marginTop: 4, borderWidth: 1, borderColor: '#E2E8F0' },
   link: { color: '#1976D2', fontWeight: '700', marginTop: 9 },
   priorityValue: { fontSize: 19, fontWeight: '800', marginVertical: 6 },
+  warningBox: { backgroundColor: '#FEFCBF', borderWidth: 1, borderColor: '#D69E2E', borderRadius: 10, padding: 12, marginTop: 12 },
+  warningText: { color: '#7B341E', fontSize: 13, lineHeight: 20 },
+  requestBox: { backgroundColor: '#fff', borderRadius: 10, borderWidth: 1, borderColor: '#E2E8F0', padding: 13, marginBottom: 10 },
+  requestMeta: { color: '#64748B', fontSize: 12, marginBottom: 6 },
+  answerBox: { backgroundColor: '#F0FDF4', borderRadius: 8, padding: 10, marginTop: 10 },
+  answerInput: { backgroundColor: '#F8FAFC', borderWidth: 1, borderColor: '#CBD5E1', borderRadius: 9, padding: 11, minHeight: 85, textAlignVertical: 'top', color: '#1E293B', marginTop: 4 },
+  answerButton: { backgroundColor: '#1976D2', borderRadius: 9, padding: 13, alignItems: 'center', marginTop: 10 },
+  answerButtonDisabled: { opacity: 0.6 },
+  answerButtonText: { color: '#fff', fontWeight: '700' },
+  successBox: { backgroundColor: '#C6F6D5', padding: 11, borderRadius: 8, marginBottom: 10 },
+  successText: { color: '#22543D', lineHeight: 20 },
   photoGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
   photoCard: { width: '48%', backgroundColor: '#fff', padding: 6, borderRadius: 9 },
   photo: { width: '100%', aspectRatio: 1, borderRadius: 6 },
