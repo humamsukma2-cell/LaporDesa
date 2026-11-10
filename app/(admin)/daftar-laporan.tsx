@@ -13,6 +13,7 @@ type ReportItem = {
   created_at: string;
   patokan_lokasi: string;
   kategori: { nama: string } | { nama: string }[] | null;
+  rab?: { id: string; status: 'draft' | 'published'; nomor_rab: string; judul: string } | { id: string; status: 'draft' | 'published'; nomor_rab: string; judul: string }[] | null;
 };
 
 type Filter = 'all' | StatusLaporanType;
@@ -37,7 +38,7 @@ export default function DaftarLaporanAdminScreen() {
     try {
       const { data, error } = await supabase
         .from('laporan')
-        .select('id, kode_laporan, deskripsi, status, created_at, patokan_lokasi, kategori(nama)')
+        .select('id, kode_laporan, deskripsi, status, created_at, patokan_lokasi, kategori(nama), rab(id, status, nomor_rab, judul)')
         .order('created_at', { ascending: false });
       if (error) throw error;
       setReports((data ?? []) as unknown as ReportItem[]);
@@ -59,6 +60,7 @@ export default function DaftarLaporanAdminScreen() {
 
   const renderItem = ({ item }: { item: ReportItem }) => {
     const status = statusMeta(item.status);
+    const rabRecord = Array.isArray(item.rab) ? item.rab[0] : item.rab;
     return (
       <TouchableOpacity
         style={styles.card}
@@ -72,6 +74,17 @@ export default function DaftarLaporanAdminScreen() {
         <Text style={styles.category}>{categoryName(item.kategori)}</Text>
         <Text style={styles.description} numberOfLines={2}>{item.deskripsi}</Text>
         <Text style={styles.meta}>Patokan: {item.patokan_lokasi}</Text>
+        {item.status === 'resolved' && (
+          <View style={[styles.rabStatus, rabRecord?.status === 'published' ? styles.rabPublished : rabRecord ? styles.rabDraft : styles.rabMissing]}>
+            <Text style={[styles.rabStatusText, rabRecord?.status === 'published' ? styles.rabPublishedText : rabRecord ? styles.rabDraftText : styles.rabMissingText]}>
+              {rabRecord?.status === 'published'
+                ? `RAB sudah diterbitkan · ${rabRecord.nomor_rab}`
+                : rabRecord
+                  ? 'RAB masih draft · belum terlihat oleh warga'
+                  : 'RAB belum dibuat'}
+            </Text>
+          </View>
+        )}
         <View style={styles.cardBottom}>
           <Text style={styles.meta}>{formatDateTime(item.created_at)}</Text>
           <Text style={styles.detailLink}>Lihat detail ›</Text>
@@ -141,6 +154,14 @@ const styles = StyleSheet.create({
   category: { color: '#1976D2', fontWeight: '700', marginTop: 10 },
   description: { color: '#334155', fontSize: 14, lineHeight: 20, marginTop: 6 },
   meta: { color: '#64748B', fontSize: 12, marginTop: 7 },
+  rabStatus: { alignSelf: 'flex-start', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 7, marginTop: 10 },
+  rabPublished: { backgroundColor: '#DCFCE7' },
+  rabDraft: { backgroundColor: '#FEF3C7' },
+  rabMissing: { backgroundColor: '#F1F5F9' },
+  rabStatusText: { fontSize: 12, fontWeight: '700' },
+  rabPublishedText: { color: '#166534' },
+  rabDraftText: { color: '#92400E' },
+  rabMissingText: { color: '#475569' },
   cardBottom: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 10, gap: 8 },
   detailLink: { color: '#1259A7', fontWeight: '700', fontSize: 13 },
 });

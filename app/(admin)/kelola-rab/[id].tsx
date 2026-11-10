@@ -25,6 +25,23 @@ export default function KelolaRabAdminScreen() {
   const [sumber, setSumber] = useState('');
   const [catatan, setCatatan] = useState('');
 
+  function parseAnggaran(value: string): number {
+    const normalized = value.trim().replace(/\s/g, '');
+    if (!normalized) return 0;
+    // Indonesian format (25.000.000 or 25.000.000,50) and plain digits
+    // use dot as thousands separator; a single comma may represent decimals.
+    const canonical = normalized.includes(',')
+      ? normalized.replace(/\./g, '').replace(',', '.')
+      : normalized.replace(/\./g, '');
+    const parsed = Number(canonical);
+    return Number.isFinite(parsed) ? parsed : 0;
+  }
+
+  function formatAnggaranInput(value: string): string {
+    const digits = value.replace(/\D/g, '');
+    return digits ? new Intl.NumberFormat('id-ID', { maximumFractionDigits: 0 }).format(Number(digits)) : '';
+  }
+
   const load = useCallback(async () => {
     if (!laporanId) {
       setError('ID laporan tidak tersedia.');
@@ -39,7 +56,7 @@ export default function KelolaRabAdminScreen() {
       if (result) {
         setNomor(result.rab.nomor_rab);
         setJudul(result.rab.judul);
-        setAnggaran(String(result.rab.total_anggaran));
+        setAnggaran(formatAnggaranInput(String(result.rab.total_anggaran)));
         setSumber(result.rab.sumber_dana);
         setCatatan(result.rab.catatan ?? '');
       }
@@ -54,6 +71,8 @@ export default function KelolaRabAdminScreen() {
 
   function makeHtml() {
     const escape = (value: string) => value.replace(/[&<>"']/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char] ?? char));
+    const amount = parseAnggaran(anggaran);
+    const amountText = formatRupiah(amount);
     const date = new Intl.DateTimeFormat('id-ID', { dateStyle: 'long' }).format(new Date());
     return `<!doctype html><html><head><meta charset="utf-8"><style>
       @page { size: A4; margin: 22mm 20mm; } body { font-family: Arial, sans-serif; color: #172033; font-size: 12pt; }
@@ -65,7 +84,7 @@ export default function KelolaRabAdminScreen() {
       <h1>RENCANA ANGGARAN BIAYA</h1><div class="sub">DOKUMEN RAB LAPORAN INFRASTRUKTUR DESA</div>
       <table><tr><td>Nomor RAB</td><td>${escape(nomor.trim())}</td></tr>
       <tr><td>Judul perbaikan</td><td>${escape(judul.trim())}</td></tr>
-      <tr><td>Anggaran perbaikan</td><td class="amount">${escape(formatRupiah(anggaran))}</td></tr>
+      <tr><td>Anggaran perbaikan</td><td class="amount">${escape(amountText) }</td></tr>
       <tr><td>Sumber dana</td><td>${escape(sumber.trim())}</td></tr>
       <tr><td>Tanggal dokumen</td><td>${escape(date)}</td></tr></table>
       ${catatan.trim() ? `<div class="note"><b>Catatan:</b><br>${escape(catatan.trim())}</div>` : ''}
@@ -90,7 +109,7 @@ export default function KelolaRabAdminScreen() {
       const rows: [string, string][] = [
         ['Nomor RAB', nomor.trim()],
         ['Judul perbaikan', judul.trim()],
-        ['Anggaran perbaikan', formatRupiah(anggaran)],
+        ['Anggaran perbaikan', formatRupiah(parseAnggaran(anggaran))],
         ['Sumber dana', sumber.trim()],
         ['Tanggal dokumen', new Intl.DateTimeFormat('id-ID', { dateStyle: 'long' }).format(new Date())],
       ];
@@ -152,7 +171,7 @@ export default function KelolaRabAdminScreen() {
 
   async function saveDraft() {
     if (!laporanId) return;
-    const amount = Number(anggaran.replace(/\s/g, '').replace(/\./g, '').replace(',', '.'));
+    const amount = parseAnggaran(anggaran);
     if (!nomor.trim() || !judul.trim() || !sumber.trim()) {
       setError('Nomor RAB, judul perbaikan, dan sumber dana wajib diisi.');
       return;
@@ -292,7 +311,7 @@ export default function KelolaRabAdminScreen() {
           <View style={styles.card}>
             <Field label="Nomor RAB" value={nomor} onChangeText={setNomor} placeholder="Contoh: RAB/2026/001" />
             <Field label="Judul perbaikan" value={judul} onChangeText={setJudul} placeholder="Contoh: Perbaikan jalan RT 02" />
-            <Field label="Anggaran perbaikan (Rp)" value={anggaran} onChangeText={setAnggaran} placeholder="Contoh: 25000000" keyboardType="decimal-pad" />
+            <Field label="Anggaran perbaikan (Rp)" value={anggaran} onChangeText={(value) => setAnggaran(formatAnggaranInput(value))} placeholder="Contoh: 25.000.000" keyboardType="number-pad" />
             <Field label="Sumber dana" value={sumber} onChangeText={setSumber} placeholder="Contoh: APBDes" />
             <Field label="Catatan (opsional)" value={catatan} onChangeText={setCatatan} placeholder="Catatan tambahan" multiline />
             <TouchableOpacity style={styles.secondaryButton} onPress={() => void previewPdf()} disabled={saving}>
@@ -356,7 +375,7 @@ function Field({ label, value, onChangeText, placeholder, multiline, keyboardTyp
   onChangeText: (value: string) => void;
   placeholder: string;
   multiline?: boolean;
-  keyboardType?: 'default' | 'decimal-pad';
+  keyboardType?: 'default' | 'decimal-pad' | 'number-pad';
 }) {
   return (
     <View style={styles.field}>

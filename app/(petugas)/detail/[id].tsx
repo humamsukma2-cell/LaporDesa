@@ -207,7 +207,11 @@ export default function DetailTugasPetugasScreen() {
     setActionError('');
     setSuccessMessage('');
     try {
-      const rows: { laporan_id: string; path: string; jenis: 'hasil_penanganan' }[] = [];
+      const { data: authData, error: authError } = await supabase.auth.getUser();
+      if (authError) throw authError;
+      const uploaderId = authData.user?.id;
+      if (!uploaderId) throw new Error('Sesi login petugas tidak tersedia.');
+      const rows: { laporan_id: string; path: string; jenis: 'hasil_penanganan'; uploaded_by: string }[] = [];
       for (let index = 0; index < pickedPhotos.length; index += 1) {
         const compressed = await ImageManipulator.manipulateAsync(
           pickedPhotos[index].uri,
@@ -221,7 +225,7 @@ export default function DetailTugasPetugasScreen() {
         const path = `${id}/hasil-${Date.now()}-${index}.jpg`;
         const { error: uploadError } = await supabase.storage.from(BUCKET).upload(path, blob, { contentType: 'image/jpeg', upsert: false });
         if (uploadError) throw uploadError;
-        rows.push({ laporan_id: id, path, jenis: 'hasil_penanganan' });
+        rows.push({ laporan_id: id, path, jenis: 'hasil_penanganan', uploaded_by: uploaderId });
       }
       const { error: insertError } = await supabase.from('foto_laporan').insert(rows);
       if (insertError) throw insertError;
