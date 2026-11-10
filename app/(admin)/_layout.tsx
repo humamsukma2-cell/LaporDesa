@@ -24,12 +24,9 @@ export default function AdminLayout() {
 
   return (
     <Stack>
-      <Stack.Screen
-        name="dashboard"
-        options={{
-          title: 'Dashboard Admin',
-        }}
-      />
+      <Stack.Screen name="dashboard" options={{ title: 'Dashboard Admin' }} />
+      <Stack.Screen name="daftar-laporan" options={{ title: 'Daftar Laporan' }} />
+      <Stack.Screen name="detail/[id]" options={{ title: 'Detail Laporan' }} />
     </Stack>
   );
 }
