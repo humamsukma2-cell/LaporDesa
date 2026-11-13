@@ -1,10 +1,12 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { ActivityIndicator, Alert, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Alert, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View, useWindowDimensions } from 'react-native';
 import * as Print from 'expo-print';
 import { jsPDF } from 'jspdf';
 import * as Sharing from 'expo-sharing';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { supabase } from '@/lib/supabase';
+import { AdminPageFooter, AdminPageHeader, AdminSectionTitle, AdminShell } from '@/components/admin/AdminShell';
+import { ADMIN_COLORS as C } from '@/lib/theme';
 import { describeError, formatDateTime } from '@/lib/laporan-ui';
 import { fetchRabForAdmin, formatRupiah, RAB_BUCKET, type RabForAdmin } from '@/lib/rab';
 
@@ -12,6 +14,8 @@ export default function KelolaRabAdminScreen() {
   const { id: rawId } = useLocalSearchParams<{ id: string | string[] }>();
   const laporanId = Array.isArray(rawId) ? rawId[0] : rawId;
   const router = useRouter();
+  const { width } = useWindowDimensions();
+  const desktop = width >= 1024;
   const [data, setData] = useState<RabForAdmin | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -297,18 +301,34 @@ export default function KelolaRabAdminScreen() {
     }
   }
 
-  if (loading) return <View style={styles.center}><ActivityIndicator size="large" color="#1976D2" /></View>;
+  if (loading) return <View style={styles.center}><ActivityIndicator size="large" color={C.primary} /><Text style={styles.loadingText}>Memuat data RAB…</Text></View>;
 
   return (
-    <KeyboardAvoidingView style={styles.container} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-      <ScrollView style={styles.container} contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
-        <Text style={styles.title}>{data ? 'Kelola RAB' : 'Buat RAB'}</Text>
-        <Text style={styles.subtitle}>Isi ringkasan RAB. Aplikasi akan membuat PDF resmi secara otomatis.</Text>
+    <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+      <AdminShell
+        section="daftar-laporan"
+        label="Kelola RAB"
+        header={(
+          <AdminPageHeader
+            eyebrow="RENCANA ANGGARAN BIAYA"
+            title={data ? 'Kelola RAB' : 'Buat RAB'}
+            subtitle="Isi ringkasan RAB, lalu terbitkan agar dapat dilihat warga."
+            note="Aplikasi membuat PDF resmi secara otomatis dari data yang Anda isi."
+            accessory={(
+              <TouchableOpacity style={styles.backChip} accessibilityRole="button" accessibilityLabel="Kembali ke detail laporan" onPress={() => (router.canGoBack() ? router.back() : router.replace('/(admin)/daftar-laporan'))}>
+                <Text style={styles.backChipText}>‹ Kembali</Text>
+              </TouchableOpacity>
+            )}
+          />
+        )}
+      >
+      <ScrollView style={styles.container} contentContainerStyle={[styles.content, desktop && styles.contentDesktop]} keyboardShouldPersistTaps="handled">
         {!!error && <View style={styles.errorBox}><Text style={styles.error}>{error}</Text></View>}
         {!!notice && <View style={styles.successBox}><Text style={styles.success}>{notice}</Text></View>}
 
         {!data || data.rab.status === 'draft' ? (
           <View style={styles.card}>
+            <AdminSectionTitle first>Rincian RAB</AdminSectionTitle>
             <Field label="Nomor RAB" value={nomor} onChangeText={setNomor} placeholder="Contoh: RAB/2026/001" />
             <Field label="Judul perbaikan" value={judul} onChangeText={setJudul} placeholder="Contoh: Perbaikan jalan RT 02" />
             <Field label="Anggaran perbaikan (Rp)" value={anggaran} onChangeText={(value) => setAnggaran(formatAnggaranInput(value))} placeholder="Contoh: 25.000.000" keyboardType="number-pad" />
@@ -318,11 +338,11 @@ export default function KelolaRabAdminScreen() {
               <Text style={styles.secondaryText}>Pratinjau / cetak PDF</Text>
             </TouchableOpacity>
             <TouchableOpacity style={[styles.primaryButton, saving && styles.disabled]} onPress={() => void saveDraft()} disabled={saving}>
-              {saving ? <ActivityIndicator color="#fff" /> : <Text style={styles.primaryText}>{data ? 'Simpan perubahan draft' : 'Buat draft dan PDF'}</Text>}
+              {saving ? <ActivityIndicator color={C.onPrimary} /> : <Text style={styles.primaryText}>{data ? 'Simpan perubahan draft' : 'Buat draft dan PDF'}</Text>}
             </TouchableOpacity>
             {data?.rab.status === 'draft' && (
               <TouchableOpacity style={[styles.publishButton, publishing && styles.disabled]} onPress={() => void publish()} disabled={publishing || saving}>
-                {publishing ? <ActivityIndicator color="#fff" /> : <Text style={styles.primaryText}>Terbitkan RAB</Text>}
+                {publishing ? <ActivityIndicator color={C.onPrimary} /> : <Text style={styles.primaryText}>Terbitkan RAB</Text>}
               </TouchableOpacity>
             )}
           </View>
@@ -337,7 +357,7 @@ export default function KelolaRabAdminScreen() {
 
         {data && (
           <View style={styles.card}>
-            <Text style={styles.sectionTitle}>PDF RAB</Text>
+            <AdminSectionTitle first>PDF RAB</AdminSectionTitle>
             {data.versions.map((version, index) => (
               <View key={version.id} style={styles.versionRow}>
                 <View style={styles.versionText}>
@@ -345,14 +365,16 @@ export default function KelolaRabAdminScreen() {
                   <Text style={styles.muted}>{formatDateTime(version.waktu_unggah)}</Text>
                 </View>
                 <TouchableOpacity style={styles.openButton} onPress={() => void downloadPdf(version.path_pdf, `${data.rab.nomor_rab}-v${version.nomor_versi}.pdf`)} disabled={downloadingPath === version.path_pdf}>
-                  {downloadingPath === version.path_pdf ? <ActivityIndicator color="#1976D2" /> : <Text style={styles.openText}>Unduh PDF</Text>}
+                  {downloadingPath === version.path_pdf ? <ActivityIndicator color={C.primary} /> : <Text style={styles.openText}>Unduh PDF</Text>}
                 </TouchableOpacity>
               </View>
             ))}
           </View>
         )}
-        <TouchableOpacity style={styles.backButton} onPress={() => router.back()}><Text style={styles.backText}>Kembali ke detail laporan</Text></TouchableOpacity>
+        <TouchableOpacity style={styles.backButton} onPress={() => (router.canGoBack() ? router.back() : router.replace('/(admin)/daftar-laporan'))}><Text style={styles.backText}>‹ Kembali ke detail laporan</Text></TouchableOpacity>
+        <AdminPageFooter note="Dokumen RAB diterbitkan dari data laporan desa." />
       </ScrollView>
+      </AdminShell>
     </KeyboardAvoidingView>
   );
 }
@@ -386,14 +408,39 @@ function Field({ label, value, onChangeText, placeholder, multiline, keyboardTyp
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#F4F7FB' }, content: { padding: 18, paddingBottom: 40 }, center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  title: { color: '#1E293B', fontSize: 23, fontWeight: '800' }, subtitle: { color: '#64748B', fontSize: 13, lineHeight: 20, marginTop: 6, marginBottom: 14 },
-  card: { backgroundColor: '#fff', borderWidth: 1, borderColor: '#E2E8F0', borderRadius: 12, padding: 15, marginBottom: 14 }, field: { marginBottom: 13 },
-  fieldLabel: { color: '#334155', fontWeight: '700', fontSize: 13, marginBottom: 6 }, input: { borderWidth: 1, borderColor: '#CBD5E1', borderRadius: 9, paddingHorizontal: 11, paddingVertical: 10, color: '#1E293B', backgroundColor: '#F8FAFC' }, multiline: { minHeight: 76, textAlignVertical: 'top' },
-  primaryButton: { backgroundColor: '#1976D2', borderRadius: 9, padding: 14, alignItems: 'center', marginTop: 11 }, publishButton: { backgroundColor: '#2F855A', borderRadius: 9, padding: 14, alignItems: 'center', marginTop: 10 }, primaryText: { color: '#fff', fontWeight: '800' }, disabled: { opacity: 0.6 },
-  secondaryButton: { borderWidth: 1, borderColor: '#1976D2', borderRadius: 9, padding: 13, alignItems: 'center' }, secondaryText: { color: '#1259A7', fontWeight: '700' },
-  errorBox: { backgroundColor: '#FEE2E2', borderRadius: 9, padding: 11, marginBottom: 12 }, error: { color: '#B91C1C', lineHeight: 20 }, successBox: { backgroundColor: '#C6F6D5', borderRadius: 9, padding: 11, marginBottom: 12 }, success: { color: '#22543D', lineHeight: 20 },
-  sectionTitle: { color: '#1E293B', fontSize: 17, fontWeight: '800', marginBottom: 10 }, versionRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderTopWidth: 1, borderTopColor: '#E2E8F0', paddingVertical: 12, gap: 8 }, versionText: { flex: 1 },
-  openButton: { paddingHorizontal: 12, paddingVertical: 9, borderWidth: 1, borderColor: '#1976D2', borderRadius: 8 }, openText: { color: '#1259A7', fontWeight: '700' }, publishedBadge: { color: '#2F855A', fontWeight: '900', marginBottom: 10 }, summary: { color: '#1259A7', fontWeight: '800', fontSize: 16, marginTop: 8 }, muted: { color: '#64748B', fontSize: 12, lineHeight: 18, marginTop: 5 },
-  backButton: { padding: 13, alignItems: 'center' }, backText: { color: '#1976D2', fontWeight: '700' },
+  flex: { flex: 1, backgroundColor: C.background },
+  container: { flex: 1, backgroundColor: C.background },
+  content: { padding: 20, paddingBottom: 40, backgroundColor: C.background },
+  contentDesktop: { paddingHorizontal: 28, paddingTop: 24, maxWidth: 1000, width: '100%', alignSelf: 'center' },
+  center: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: C.background },
+  loadingText: { color: C.textMuted, fontSize: 13, marginTop: 10 },
+  title: { color: C.text, fontSize: 23, fontWeight: '800' },
+  subtitle: { color: C.textMuted, fontSize: 13, lineHeight: 20, marginTop: 6, marginBottom: 14 },
+  card: { backgroundColor: C.surface, borderWidth: 1, borderColor: C.border, borderRadius: 12, padding: 18, marginTop: 20 },
+  field: { marginBottom: 13 },
+  fieldLabel: { color: C.textBody, fontWeight: '700', fontSize: 13, marginBottom: 6 },
+  input: { borderWidth: 1, borderColor: C.borderInput, borderRadius: 9, paddingHorizontal: 12, paddingVertical: 11, minHeight: 44, color: C.text, backgroundColor: C.inputBg },
+  multiline: { minHeight: 76, textAlignVertical: 'top' },
+  primaryButton: { backgroundColor: C.primary, borderRadius: 9, padding: 14, minHeight: 48, justifyContent: 'center', alignItems: 'center', marginTop: 11 },
+  publishButton: { backgroundColor: C.primaryDark, borderRadius: 9, padding: 14, minHeight: 48, justifyContent: 'center', alignItems: 'center', marginTop: 10 },
+  primaryText: { color: C.onPrimary, fontWeight: '800' },
+  disabled: { opacity: 0.6 },
+  secondaryButton: { borderWidth: 1, borderColor: C.primary, borderRadius: 9, padding: 13, minHeight: 46, justifyContent: 'center', alignItems: 'center' },
+  secondaryText: { color: C.primary, fontWeight: '700' },
+  errorBox: { backgroundColor: C.dangerSoft, borderRadius: 9, padding: 12, marginTop: 16, borderWidth: 1, borderColor: C.dangerBorder },
+  error: { color: C.danger, lineHeight: 20 },
+  successBox: { backgroundColor: C.successSoft, borderRadius: 9, padding: 12, marginTop: 16, borderWidth: 1, borderColor: C.primarySoftBorder },
+  success: { color: C.successText, lineHeight: 20 },
+  sectionTitle: { color: C.text, fontSize: 17, fontWeight: '800', marginBottom: 10 },
+  versionRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderTopWidth: 1, borderTopColor: '#EFF4F1', paddingVertical: 12, gap: 8 },
+  versionText: { flex: 1 },
+  openButton: { paddingHorizontal: 13, paddingVertical: 9, minHeight: 40, justifyContent: 'center', borderWidth: 1, borderColor: C.primary, borderRadius: 8 },
+  openText: { color: C.primary, fontWeight: '700', fontSize: 12 },
+  publishedBadge: { color: C.primary, fontWeight: '900', marginBottom: 10, letterSpacing: 0.4, fontSize: 11 },
+  summary: { color: C.primaryDark, fontWeight: '800', fontSize: 16, marginTop: 8 },
+  muted: { color: C.textMuted, fontSize: 12, lineHeight: 18, marginTop: 5 },
+  backButton: { padding: 13, alignItems: 'center', marginTop: 12 },
+  backText: { color: C.primary, fontWeight: '700' },
+  backChip: { borderWidth: 1, borderColor: C.border, backgroundColor: C.surface, borderRadius: 999, paddingHorizontal: 16, minHeight: 40, justifyContent: 'center', marginTop: 12 },
+  backChipText: { color: C.textBody, fontWeight: '700', fontSize: 12 },
 });

@@ -11,9 +11,12 @@ import {
   TextInput,
   TouchableOpacity,
   View,
+  useWindowDimensions,
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { supabase } from '@/lib/supabase';
+import { AdminPageHeader, AdminSectionTitle, AdminShell } from '@/components/admin/AdminShell';
+import { ADMIN_COLORS as C } from '@/lib/theme';
 import {
   DEFAULT_KONFIGURASI_PRIORITAS,
   PRIORITY_META,
@@ -85,6 +88,8 @@ export default function DetailLaporanAdminScreen() {
   const { id: rawId } = useLocalSearchParams<{ id: string | string[] }>();
   const id = Array.isArray(rawId) ? rawId[0] : rawId;
   const router = useRouter();
+  const { width } = useWindowDimensions();
+  const desktop = width >= 1024;
 
   const [report, setReport] = useState<ReportDetail | null>(null);
   const [history, setHistory] = useState<HistoryEntry[]>([]);
@@ -352,7 +357,7 @@ export default function DetailLaporanAdminScreen() {
     }
   }
 
-  if (loading) return <View style={styles.center}><ActivityIndicator size="large" color="#1976D2" /><Text style={styles.muted}>Memuat detail laporan…</Text></View>;
+  if (loading) return <View style={styles.center}><ActivityIndicator size="large" color={C.primary} /><Text style={styles.muted}>Memuat detail laporan…</Text></View>;
   if (!report) return (
     <View style={styles.center}>
       <Text style={styles.errorTitle}>Detail belum dapat ditampilkan</Text>
@@ -374,17 +379,35 @@ export default function DetailLaporanAdminScreen() {
 
   return (
     <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-      <ScrollView style={styles.container} contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
+      <AdminShell
+        section="daftar-laporan"
+        label="Detail Laporan"
+        header={(
+          <AdminPageHeader
+            eyebrow="TINDAK LANJUT LAPORAN"
+            title={report.kode_laporan}
+            subtitle={categoryName(report.kategori)}
+            note="Periksa rincian laporan, tentukan tindak lanjut, lalu kelola RAB bila diperlukan."
+            accessory={(
+              <TouchableOpacity style={styles.backChip} accessibilityRole="button" accessibilityLabel="Kembali ke daftar laporan" onPress={() => (router.canGoBack() ? router.back() : router.replace('/(admin)/daftar-laporan'))}>
+                <Text style={styles.backChipText}>‹ Kembali</Text>
+              </TouchableOpacity>
+            )}
+          />
+        )}
+      >
+      <ScrollView style={styles.container} contentContainerStyle={[styles.content, desktop && styles.contentDesktop]} keyboardShouldPersistTaps="handled">
         {!!errorMessage && <View style={styles.inlineError}><Text style={styles.errorText}>{errorMessage}</Text></View>}
         {!!successMessage && <View style={styles.successBox}><Text style={styles.successText}>{successMessage}</Text></View>}
 
-        <Text style={styles.code}>{report.kode_laporan}</Text>
+        <View style={[styles.columns, desktop && styles.columnsDesktop]}>
+          <View style={[styles.columnMain, desktop && styles.columnMainDesktop]}>
         <View style={[styles.statusBox, { backgroundColor: status.background }]}>
           <Text style={styles.statusLabel}>Status saat ini</Text>
           <Text style={[styles.statusValue, { color: status.color }]}>{status.label}</Text>
         </View>
 
-        <Text style={styles.sectionTitle}>Informasi laporan</Text>
+        <AdminSectionTitle>Informasi laporan</AdminSectionTitle>
         <Info label="Kategori" value={categoryName(report.kategori)} />
         <Info label="Pelapor" value={(Array.isArray(report.pelapor) ? report.pelapor[0]?.nama : report.pelapor?.nama) ?? 'Tidak tersedia'} />
         <Info label="Tanggal dikirim" value={formatDateTime(report.created_at)} />
@@ -400,7 +423,7 @@ export default function DetailLaporanAdminScreen() {
           </View>
         ) : <Info label="Lokasi GPS" value="Tidak disertakan oleh pelapor" />}
 
-        <Text style={styles.sectionTitle}>Foto laporan</Text>
+        <AdminSectionTitle>Foto laporan</AdminSectionTitle>
         {photos.length === 0 ? <Text style={styles.muted}>Tidak ada foto yang tercatat.</Text> : (
           <View style={styles.photoGrid}>{photos.map((photo) => (
             <View key={photo.id} style={styles.photoCard}>
@@ -409,8 +432,10 @@ export default function DetailLaporanAdminScreen() {
             </View>
           ))}</View>
         )}
+          </View>
 
-        <Text style={styles.sectionTitle}>Verifikasi laporan</Text>
+          <View style={[styles.columnSide, desktop && styles.columnSideDesktop]}>
+        <AdminSectionTitle>Verifikasi laporan</AdminSectionTitle>
         {canVerify ? (
           <View style={styles.actionBox}>
             {!action ? (
@@ -448,7 +473,7 @@ export default function DetailLaporanAdminScreen() {
                     <Text style={styles.cancelText}>Batal</Text>
                   </TouchableOpacity>
                   <TouchableOpacity style={[styles.actionButton, styles.confirmButton, submitting && styles.disabled]} onPress={() => void submitAction()} disabled={submitting}>
-                    {submitting ? <ActivityIndicator color="#fff" /> : <Text style={styles.confirmText}>Kirim</Text>}
+                    {submitting ? <ActivityIndicator color={C.onPrimary} /> : <Text style={styles.confirmText}>Kirim</Text>}
                   </TouchableOpacity>
                 </View>
               </View>
@@ -458,7 +483,7 @@ export default function DetailLaporanAdminScreen() {
           <Text style={styles.muted}>Hanya laporan berstatus Pending yang dapat diverifikasi.</Text>
         )}
 
-        <Text style={styles.sectionTitle}>Penilaian prioritas</Text>
+        <AdminSectionTitle>Penilaian prioritas</AdminSectionTitle>
         {priority ? (
           <View style={styles.card}>
             {CRITERIA.map((criterion) => (
@@ -570,7 +595,7 @@ export default function DetailLaporanAdminScreen() {
                     <Text style={styles.cancelText}>Batal</Text>
                   </TouchableOpacity>
                   <TouchableOpacity style={[styles.actionButton, styles.confirmButton, savingPriority && styles.disabled]} onPress={() => void submitPriority()} disabled={savingPriority}>
-                    {savingPriority ? <ActivityIndicator color="#fff" /> : <Text style={styles.confirmText}>Simpan penilaian</Text>}
+                    {savingPriority ? <ActivityIndicator color={C.onPrimary} /> : <Text style={styles.confirmText}>Simpan penilaian</Text>}
                   </TouchableOpacity>
                 </View>
               </View>
@@ -582,7 +607,7 @@ export default function DetailLaporanAdminScreen() {
           </Text>
         )}
 
-        <Text style={styles.sectionTitle}>Penugasan petugas</Text>
+        <AdminSectionTitle>Penugasan petugas</AdminSectionTitle>
         {assignment ? (
           <View style={styles.card}>
             <View style={styles.scoreRow}><Text style={styles.scoreLabel}>Petugas</Text><Text style={styles.scoreValue}>{assignedOfficerName}</Text></View>
@@ -601,7 +626,7 @@ export default function DetailLaporanAdminScreen() {
             ) : (
               <View>
                 <Text style={styles.actionTitle}>Pilih petugas</Text>
-                {loadingOfficers ? <ActivityIndicator color="#1976D2" /> : officers.length === 0 ? (
+                {loadingOfficers ? <ActivityIndicator color={C.primary} /> : officers.length === 0 ? (
                   <Text style={styles.muted}>Belum ada akun petugas. Minta admin membuat akun petugas terlebih dahulu.</Text>
                 ) : (
                   <View style={styles.officerList}>
@@ -627,7 +652,7 @@ export default function DetailLaporanAdminScreen() {
                     onPress={() => void submitAssignment()}
                     disabled={savingAssignment || officers.length === 0}
                   >
-                    {savingAssignment ? <ActivityIndicator color="#fff" /> : <Text style={styles.confirmText}>Tugaskan</Text>}
+                    {savingAssignment ? <ActivityIndicator color={C.onPrimary} /> : <Text style={styles.confirmText}>Tugaskan</Text>}
                   </TouchableOpacity>
                 </View>
               </View>
@@ -645,7 +670,7 @@ export default function DetailLaporanAdminScreen() {
 
         {infoRequests.length > 0 && (
           <>
-            <Text style={styles.sectionTitle}>Permintaan informasi tambahan</Text>
+            <AdminSectionTitle>Permintaan informasi tambahan</AdminSectionTitle>
             {infoRequests.map((request) => (
               <View key={request.id} style={styles.card}>
                 <Text style={styles.infoLabel}>Diminta {formatDateTime(request.created_at)}</Text>
@@ -657,7 +682,7 @@ export default function DetailLaporanAdminScreen() {
           </>
         )}
 
-        <Text style={styles.sectionTitle}>RAB (Rencana Anggaran Biaya)</Text>
+        <AdminSectionTitle>RAB (Rencana Anggaran Biaya)</AdminSectionTitle>
         {rab ? (
           <View style={styles.card}>
             <Text style={styles.body}>Nomor: {rab.rab.nomor_rab} · {rab.rab.status === 'published' ? 'Published' : 'Draft'}</Text>
@@ -675,7 +700,10 @@ export default function DetailLaporanAdminScreen() {
           </View>
         ) : <Text style={styles.muted}>RAB dapat dibuat setelah laporan diverifikasi.</Text>}
 
-        <Text style={styles.sectionTitle}>Riwayat status</Text>
+        </View>
+        </View>
+
+        <AdminSectionTitle>Riwayat status</AdminSectionTitle>
         {history.length === 0 ? <Text style={styles.muted}>Belum ada riwayat status.</Text> : history.map((entry) => (
           <View key={entry.id} style={styles.timelineItem}>
             <View style={styles.timelineDot} />
@@ -689,6 +717,7 @@ export default function DetailLaporanAdminScreen() {
           </View>
         ))}
       </ScrollView>
+      </AdminShell>
     </KeyboardAvoidingView>
   );
 }
@@ -698,82 +727,91 @@ function Info({ label, value }: { label: string; value: string }) {
 }
 
 const styles = StyleSheet.create({
-  flex: { flex: 1 },
-  container: { flex: 1, backgroundColor: '#F4F7FB' },
-  content: { padding: 18, paddingBottom: 40 },
-  center: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 28, backgroundColor: '#F4F7FB' },
-  code: { color: '#1E293B', fontSize: 20, fontWeight: '800', marginBottom: 14 },
-  statusBox: { padding: 15, borderRadius: 12 },
-  statusLabel: { color: '#475569', fontSize: 13 },
+  flex: { flex: 1, backgroundColor: C.background },
+  container: { flex: 1, backgroundColor: C.background },
+  content: { padding: 20, paddingBottom: 40, backgroundColor: C.background },
+  contentDesktop: { paddingHorizontal: 28, paddingTop: 24 },
+  columns: { gap: 0 },
+  columnsDesktop: { flexDirection: 'row', alignItems: 'flex-start', gap: 22 },
+  columnMain: { minWidth: 0 },
+  columnMainDesktop: { flex: 1.15 },
+  columnSide: { minWidth: 0 },
+  columnSideDesktop: { flex: 1 },
+  center: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 28, backgroundColor: C.background },
+  code: { color: C.text, fontSize: 20, fontWeight: '800', marginBottom: 14 },
+  statusBox: { padding: 16, borderRadius: 12, marginTop: 22 },
+  statusLabel: { color: '#475569', fontSize: 12, letterSpacing: 0.2 },
   statusValue: { fontSize: 17, fontWeight: '800', marginTop: 4 },
-  sectionTitle: { color: '#1E293B', fontWeight: '800', fontSize: 17, marginTop: 24, marginBottom: 10 },
-  card: { backgroundColor: '#fff', padding: 13, borderRadius: 9, marginBottom: 8, borderWidth: 1, borderColor: '#E2E8F0' },
-  infoLabel: { color: '#64748B', fontSize: 12, marginBottom: 5, marginTop: 6 },
-  body: { color: '#334155', fontSize: 14, lineHeight: 21 },
-  link: { color: '#1976D2', fontWeight: '700', marginTop: 9 },
+  sectionTitle: { color: C.text, fontWeight: '800', fontSize: 17, marginTop: 24, marginBottom: 10 },
+  card: { backgroundColor: C.surface, padding: 15, borderRadius: 12, marginBottom: 10, borderWidth: 1, borderColor: C.border },
+  infoLabel: { color: C.textSubtle, fontSize: 11.5, marginBottom: 5, marginTop: 4, letterSpacing: 0.2 },
+  body: { color: C.textBody, fontSize: 14, lineHeight: 21 },
+  link: { color: C.primary, fontWeight: '700', marginTop: 9 },
   photoGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
-  photoCard: { width: '48%', backgroundColor: '#fff', padding: 6, borderRadius: 9 },
-  photo: { width: '100%', aspectRatio: 1, borderRadius: 6 },
+  photoCard: { width: '48%', backgroundColor: C.surface, padding: 7, borderRadius: 12, borderWidth: 1, borderColor: C.border },
+  photo: { width: '100%', aspectRatio: 1, borderRadius: 8 },
   photoUnavailable: { alignItems: 'center', justifyContent: 'center', padding: 8 },
-  photoCaption: { color: '#475569', fontSize: 12, margin: 6 },
-  actionBox: { backgroundColor: '#fff', padding: 14, borderRadius: 11, borderWidth: 1, borderColor: '#E2E8F0' },
+  photoCaption: { color: C.textSubtle, fontSize: 12, margin: 6, lineHeight: 17 },
+  actionBox: { backgroundColor: C.surface, padding: 16, borderRadius: 12, borderWidth: 1, borderColor: C.border, marginBottom: 10 },
   actionRow: { flexDirection: 'row', gap: 8, flexWrap: 'wrap' },
-  actionButton: { flexGrow: 1, minWidth: 92, padding: 12, borderRadius: 9, alignItems: 'center', justifyContent: 'center' },
-  verifyButton: { backgroundColor: '#2F855A' },
-  verifyText: { color: '#fff', fontWeight: '700' },
-  infoButton: { backgroundColor: '#E9D8FD' },
-  infoText: { color: '#553C9A', fontWeight: '700' },
-  rejectButton: { backgroundColor: '#FED7D7' },
-  rejectText: { color: '#9B2C2C', fontWeight: '700' },
-  actionTitle: { color: '#1E293B', fontSize: 16, fontWeight: '800', marginBottom: 6 },
-  hint: { color: '#64748B', fontSize: 13, lineHeight: 19, marginBottom: 10 },
-  input: { backgroundColor: '#F8FAFC', borderWidth: 1, borderColor: '#CBD5E1', borderRadius: 9, padding: 12, minHeight: 95, textAlignVertical: 'top', color: '#1E293B' },
-  actionError: { color: '#B91C1C', marginTop: 9, lineHeight: 19 },
-  cancelButton: { backgroundColor: '#E2E8F0' },
-  cancelText: { color: '#334155', fontWeight: '700' },
-  confirmButton: { backgroundColor: '#1976D2' },
-  confirmText: { color: '#fff', fontWeight: '700' },
+  actionButton: { flexGrow: 1, minWidth: 92, minHeight: 44, paddingHorizontal: 12, paddingVertical: 11, borderRadius: 9, alignItems: 'center', justifyContent: 'center' },
+  verifyButton: { backgroundColor: C.primary },
+  verifyText: { color: C.onPrimary, fontWeight: '700' },
+  infoButton: { backgroundColor: C.warningSoft, borderWidth: 1, borderColor: '#EBDDBF' },
+  infoText: { color: C.warningText, fontWeight: '700' },
+  rejectButton: { backgroundColor: C.dangerSoft, borderWidth: 1, borderColor: C.dangerBorder },
+  rejectText: { color: C.dangerText, fontWeight: '700' },
+  actionTitle: { color: C.text, fontSize: 15, fontWeight: '800', marginBottom: 6 },
+  hint: { color: C.textMuted, fontSize: 13, lineHeight: 19, marginBottom: 10 },
+  input: { backgroundColor: C.inputBg, borderWidth: 1, borderColor: C.borderInput, borderRadius: 9, padding: 12, minHeight: 95, textAlignVertical: 'top', color: C.text },
+  actionError: { color: C.danger, marginTop: 9, lineHeight: 19 },
+  cancelButton: { backgroundColor: C.surfaceMuted, borderWidth: 1, borderColor: C.border },
+  cancelText: { color: C.textBody, fontWeight: '700' },
+  confirmButton: { backgroundColor: C.primary },
+  confirmText: { color: C.onPrimary, fontWeight: '700' },
   disabled: { opacity: 0.6 },
-  successBox: { backgroundColor: '#C6F6D5', padding: 12, borderRadius: 9, marginBottom: 12 },
-  successText: { color: '#22543D', lineHeight: 20 },
-  inlineError: { backgroundColor: '#FEE2E2', padding: 10, borderRadius: 8, marginBottom: 12 },
-  errorTitle: { color: '#1E293B', fontSize: 18, fontWeight: '700', marginBottom: 8, textAlign: 'center' },
-  errorText: { color: '#B91C1C', textAlign: 'center', lineHeight: 21 },
-  muted: { color: '#64748B', fontSize: 13, lineHeight: 20, marginTop: 6 },
+  successBox: { backgroundColor: C.successSoft, padding: 12, borderRadius: 9, marginTop: 16, borderWidth: 1, borderColor: C.primarySoftBorder },
+  successText: { color: C.successText, lineHeight: 20 },
+  inlineError: { backgroundColor: C.dangerSoft, padding: 12, borderRadius: 9, marginTop: 16, borderWidth: 1, borderColor: C.dangerBorder },
+  errorTitle: { color: C.text, fontSize: 18, fontWeight: '700', marginBottom: 8, textAlign: 'center' },
+  errorText: { color: C.danger, lineHeight: 21 },
+  muted: { color: C.textMuted, fontSize: 13, lineHeight: 20, marginTop: 6 },
   timelineItem: { flexDirection: 'row', marginBottom: 16 },
-  timelineDot: { width: 11, height: 11, borderRadius: 6, backgroundColor: '#1976D2', marginTop: 4, marginRight: 11 },
-  timelineContent: { flex: 1, backgroundColor: '#fff', padding: 12, borderRadius: 9, borderWidth: 1, borderColor: '#E2E8F0' },
-  historyStatus: { color: '#1E293B', fontWeight: '700', marginBottom: 5 },
+  timelineDot: { width: 10, height: 10, borderRadius: 5, backgroundColor: C.primary, marginTop: 6, marginRight: 11 },
+  timelineContent: { flex: 1, backgroundColor: C.surface, padding: 13, borderRadius: 12, borderWidth: 1, borderColor: C.border },
+  historyStatus: { color: C.text, fontWeight: '700', marginBottom: 5 },
   scoreRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12, paddingVertical: 6 },
-  scoreLabel: { color: '#475569', fontSize: 13, flexShrink: 1 },
-  scoreValue: { color: '#1E293B', fontSize: 13, fontWeight: '700', textAlign: 'right' },
+  scoreLabel: { color: C.textSubtle, fontSize: 13, flexShrink: 1 },
+  scoreValue: { color: C.text, fontSize: 13, fontWeight: '700', textAlign: 'right' },
   finalPriority: { marginTop: 10, padding: 12, borderRadius: 9 },
   finalPriorityLabel: { color: '#475569', fontSize: 12 },
   finalPriorityValue: { fontSize: 17, fontWeight: '800', marginTop: 4 },
   criteriaBlock: { marginTop: 12 },
-  criteriaLabel: { color: '#334155', fontSize: 13, fontWeight: '700', marginBottom: 7 },
+  criteriaLabel: { color: C.textBody, fontSize: 13, fontWeight: '700', marginBottom: 7 },
   criteriaOptions: { flexDirection: 'row', gap: 7 },
-  criteriaChip: { flex: 1, borderWidth: 1, borderColor: '#CBD5E1', borderRadius: 8, paddingVertical: 10, alignItems: 'center', backgroundColor: '#fff' },
-  criteriaChipActive: { backgroundColor: '#1976D2', borderColor: '#1976D2' },
-  criteriaChipText: { color: '#334155', fontWeight: '700' },
-  criteriaChipTextActive: { color: '#fff' },
-  previewBox: { backgroundColor: '#EAF3FF', borderRadius: 9, padding: 12, marginTop: 14 },
-  previewLabel: { color: '#475569', fontSize: 13, lineHeight: 20 },
-  previewValue: { color: '#1259A7', fontSize: 24, fontWeight: '800', marginBottom: 4 },
+  criteriaChip: { flex: 1, borderWidth: 1, borderColor: C.borderInput, borderRadius: 8, paddingVertical: 10, minHeight: 42, alignItems: 'center', justifyContent: 'center', backgroundColor: C.surface },
+  criteriaChipActive: { backgroundColor: C.primary, borderColor: C.primary },
+  criteriaChipText: { color: C.textBody, fontWeight: '700' },
+  criteriaChipTextActive: { color: C.onPrimary },
+  previewBox: { backgroundColor: C.primarySoft, borderRadius: 9, padding: 13, marginTop: 14, borderWidth: 1, borderColor: C.primarySoftBorder },
+  previewLabel: { color: C.textSubtle, fontSize: 13, lineHeight: 20 },
+  previewValue: { color: C.primaryDark, fontSize: 24, fontWeight: '800', marginBottom: 4 },
   overrideWarning: { color: '#9C4221', fontSize: 12, lineHeight: 18, marginTop: 8, fontWeight: '600' },
   overrideNote: { color: '#9C4221', fontSize: 12, lineHeight: 18, marginTop: 6 },
   priorityChoices: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 2 },
-  priorityChip: { borderWidth: 1, borderColor: '#CBD5E1', borderRadius: 18, paddingHorizontal: 13, paddingVertical: 9, backgroundColor: '#fff' },
-  priorityChipText: { color: '#334155', fontSize: 12, fontWeight: '600' },
+  priorityChip: { borderWidth: 1, borderColor: C.borderInput, borderRadius: 999, paddingHorizontal: 13, minHeight: 40, justifyContent: 'center', backgroundColor: C.surface },
+  priorityChipText: { color: C.textBody, fontSize: 12, fontWeight: '600' },
   overrideInputBox: { marginTop: 14 },
-  overrideInput: { backgroundColor: '#F8FAFC', borderWidth: 1, borderColor: '#CBD5E1', borderRadius: 9, padding: 12, minHeight: 80, textAlignVertical: 'top', color: '#1E293B' },
-  overrideHint: { color: '#64748B', fontSize: 12, marginTop: 6, lineHeight: 18 },
+  overrideInput: { backgroundColor: C.inputBg, borderWidth: 1, borderColor: C.borderInput, borderRadius: 9, padding: 12, minHeight: 80, textAlignVertical: 'top', color: C.text },
+  overrideHint: { color: C.textMuted, fontSize: 12, marginTop: 6, lineHeight: 18 },
   officerList: { gap: 8, marginVertical: 6 },
-  officerChip: { borderWidth: 1, borderColor: '#CBD5E1', borderRadius: 9, padding: 12, backgroundColor: '#fff' },
-  officerChipActive: { borderColor: '#1976D2', backgroundColor: '#EAF3FF' },
-  officerText: { color: '#334155' },
-  officerTextActive: { color: '#1259A7', fontWeight: '700' },
-  button: { backgroundColor: '#1976D2', paddingHorizontal: 18, paddingVertical: 12, borderRadius: 9, marginTop: 16 },
-  buttonText: { color: '#fff', fontWeight: '700' },
-  backLink: { color: '#1976D2', fontWeight: '700', marginTop: 16 },
+  officerChip: { borderWidth: 1, borderColor: C.borderInput, borderRadius: 9, padding: 12, minHeight: 44, justifyContent: 'center', backgroundColor: C.surface },
+  officerChipActive: { borderColor: C.primary, backgroundColor: C.primarySoft },
+  officerText: { color: C.textBody },
+  officerTextActive: { color: C.primary, fontWeight: '700' },
+  button: { backgroundColor: C.primary, paddingHorizontal: 18, paddingVertical: 12, borderRadius: 9, marginTop: 16 },
+  buttonText: { color: C.onPrimary, fontWeight: '700' },
+  backLink: { color: C.primary, fontWeight: '700', marginTop: 16 },
+  backChip: { borderWidth: 1, borderColor: C.border, backgroundColor: C.surface, borderRadius: 999, paddingHorizontal: 16, minHeight: 40, justifyContent: 'center', marginTop: 16 },
+  backChipText: { color: C.textBody, fontWeight: '700', fontSize: 12 },
 });

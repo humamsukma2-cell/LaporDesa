@@ -3,6 +3,7 @@ import { useRouter } from 'expo-router';
 import { Stack } from 'expo-router';
 import { useAuth } from '@/contexts/AuthContext';
 import { View, ActivityIndicator, StyleSheet } from 'react-native';
+import { ADMIN_COLORS as C } from '@/lib/theme';
 
 export default function AdminLayout() {
   const { profile, loading } = useAuth();
@@ -17,13 +18,13 @@ export default function AdminLayout() {
   if (loading || !profile || profile.peran !== 'admin') {
     return (
       <View style={styles.container}>
-        <ActivityIndicator size="large" color="#2196F3" />
+        <ActivityIndicator size="large" color={C.primary} />
       </View>
     );
   }
 
   return (
-    <Stack>
+    <Stack screenOptions={{ headerShown: false }}>
       <Stack.Screen name="dashboard" options={{ title: 'Dashboard Admin' }} />
       <Stack.Screen name="daftar-laporan" options={{ title: 'Daftar Laporan' }} />
       <Stack.Screen name="detail/[id]" options={{ title: 'Detail Laporan' }} />
