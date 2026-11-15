@@ -4,6 +4,7 @@ import * as FileSystem from 'expo-file-system/legacy';
 import * as Sharing from 'expo-sharing';
 import { formatDateTime } from '@/lib/laporan-ui';
 import { supabase } from '@/lib/supabase';
+import { CITIZEN_COLORS as C, CITIZEN_GLASS_SHADOW } from '@/lib/masyarakat-theme';
 import {
   formatFileSize,
   formatRupiah,
@@ -15,6 +16,8 @@ import {
 type Props = {
   data: RabWithVersion | null;
   emptyText?: string;
+  /** Saat true, panel tidak menggambar kartu sendiri agar tidak bertumpuk di dalam kartu induk. */
+  embedded?: boolean;
 };
 
 async function blobToBase64(blob: Blob): Promise<string> {
@@ -26,7 +29,7 @@ async function blobToBase64(blob: Blob): Promise<string> {
   });
 }
 
-export function RabPanel({ data, emptyText = 'RAB belum tersedia untuk laporan ini.' }: Props) {
+export function RabPanel({ data, emptyText = 'RAB belum tersedia untuk laporan ini.', embedded = false }: Props) {
   const [opening, setOpening] = useState(false);
   const [downloading, setDownloading] = useState(false);
   const [error, setError] = useState('');
@@ -90,7 +93,7 @@ export function RabPanel({ data, emptyText = 'RAB belum tersedia untuk laporan i
   }
 
   return (
-    <View style={styles.card}>
+    <View style={[styles.card, embedded && styles.embeddedCard]}>
       <View style={styles.row}>
         <Text style={styles.label}>Nomor RAB</Text>
         <Text style={styles.value}>{rab.nomor_rab}</Text>
@@ -131,10 +134,10 @@ export function RabPanel({ data, emptyText = 'RAB belum tersedia untuk laporan i
         onPress={() => void handleOpen()}
         disabled={opening}
       >
-        {opening ? <ActivityIndicator color="#fff" /> : <Text style={styles.buttonText}>{error ? 'Coba buka lagi' : 'Buka PDF RAB'}</Text>}
+        {opening ? <ActivityIndicator color={C.white} /> : <Text style={styles.buttonText}>{error ? 'Coba buka lagi' : 'Buka PDF RAB'}</Text>}
       </TouchableOpacity>
       <TouchableOpacity style={[styles.downloadButton, downloading && styles.disabled]} onPress={() => void handleDownload()} disabled={downloading}>
-        {downloading ? <ActivityIndicator color="#1259A7" /> : <Text style={styles.downloadText}>Unduh PDF RAB</Text>}
+        {downloading ? <ActivityIndicator color={C.primaryStrong} /> : <Text style={styles.downloadText}>Unduh PDF RAB</Text>}
       </TouchableOpacity>
 
       <Text style={styles.note}>
@@ -145,17 +148,18 @@ export function RabPanel({ data, emptyText = 'RAB belum tersedia untuk laporan i
 }
 
 const styles = StyleSheet.create({
-  card: { backgroundColor: '#fff', borderRadius: 10, borderWidth: 1, borderColor: '#E2E8F0', padding: 14 },
-  row: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12, paddingVertical: 6 },
-  label: { color: '#64748B', fontSize: 13, flexShrink: 1 },
-  value: { color: '#1E293B', fontSize: 13, fontWeight: '600', textAlign: 'right', flexShrink: 1, flex: 1 },
-  total: { color: '#1259A7', fontSize: 16, fontWeight: '800', textAlign: 'right' },
-  button: { backgroundColor: '#1976D2', borderRadius: 9, padding: 13, alignItems: 'center', marginTop: 10 },
-  buttonText: { color: '#fff', fontWeight: '700' },
-  downloadButton: { borderWidth: 1, borderColor: '#1976D2', borderRadius: 9, padding: 12, alignItems: 'center', marginTop: 8 },
-  downloadText: { color: '#1259A7', fontWeight: '700' },
+  card: { backgroundColor: C.glass, borderRadius: 20, borderWidth: 1, borderColor: C.border, padding: 15, ...CITIZEN_GLASS_SHADOW },
+  embeddedCard: { backgroundColor: 'transparent', borderWidth: 0, padding: 0, shadowOpacity: 0, shadowRadius: 0, elevation: 0 },
+  row: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12, paddingVertical: 7 },
+  label: { color: C.muted, fontSize: 13, flexShrink: 1 },
+  value: { color: C.text, fontSize: 13, fontWeight: '600', textAlign: 'right', flexShrink: 1, flex: 1 },
+  total: { color: C.primaryStrong, fontSize: 16, fontWeight: '800', textAlign: 'right', flexShrink: 1 },
+  button: { backgroundColor: C.black, borderRadius: 999, minHeight: 46, justifyContent: 'center', paddingHorizontal: 16, alignItems: 'center', marginTop: 10 },
+  buttonText: { color: C.white, fontWeight: '700' },
+  downloadButton: { borderWidth: 1, borderColor: C.primary, borderRadius: 999, minHeight: 46, justifyContent: 'center', paddingHorizontal: 14, alignItems: 'center', marginTop: 8 },
+  downloadText: { color: C.primaryStrong, fontWeight: '700' },
   disabled: { opacity: 0.6 },
-  error: { color: '#B91C1C', fontSize: 13, lineHeight: 19, marginTop: 6 },
-  note: { color: '#64748B', fontSize: 12, lineHeight: 18, marginTop: 10 },
+  error: { color: C.danger, fontSize: 13, lineHeight: 19, marginTop: 6 },
+  note: { color: C.muted, fontSize: 12, lineHeight: 18, marginTop: 10 },
   muted: { color: '#64748B', fontSize: 13, lineHeight: 20, marginTop: 6 },
 });

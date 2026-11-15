@@ -21,6 +21,8 @@ import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
 import { KATEGORI_INFRASTRUKTUR, FOTO_CONFIG } from '@/lib/constants';
 import { TingkatType } from '@/types';
+import { CITIZEN_CARD_SHADOW, CITIZEN_COLORS as C, CITIZEN_RADIUS } from '@/lib/masyarakat-theme';
+import { useMasyarakatShell, MasyarakatPageHeader } from '@/components/MasyarakatShell';
 
 const MAX_IMAGE_BYTES = FOTO_CONFIG.MAX_SIZE_TOTAL;
 const MAX_IMAGE_COUNT = 3;
@@ -43,6 +45,7 @@ const urgencies: { value: TingkatType; label: string }[] = [
 export default function BuatLaporanScreen() {
   const router = useRouter();
   const { session } = useAuth();
+  const { desktop } = useMasyarakatShell();
   const [category, setCategory] = useState('');
   const [description, setDescription] = useState('');
   const [urgency, setUrgency] = useState<TingkatType | ''>('');
@@ -258,29 +261,39 @@ export default function BuatLaporanScreen() {
   }
 
   return (
-    <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-      <ScrollView style={styles.container} contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
-        <Text style={styles.title}>Buat Laporan</Text>
-        <Text style={styles.subtitle}>Foto wajib. GPS opsional; patokan lokasi wajib.</Text>
+    <View style={styles.flex}>
+      <MasyarakatPageHeader
+        eyebrow="LAPORAN BARU"
+        title="Buat Laporan"
+        subtitle="Sampaikan masalah di sekitar Anda dengan jelas."
+        note="Foto dan patokan lokasi membantu petugas menindaklanjuti laporan."
+      />
+      <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+      <ScrollView style={styles.container} contentContainerStyle={[styles.content, { paddingHorizontal: desktop ? 40 : 16 }]} keyboardShouldPersistTaps="handled">
+        <View style={styles.stepCard}><View style={styles.step}><Text style={styles.stepCircle}>1</Text><Text style={styles.stepLabel}>Detail</Text></View><View style={styles.stepLine} /><View style={styles.step}><Text style={styles.stepCircleInactive}>2</Text><Text style={styles.stepLabel}>Lokasi & foto</Text></View><View style={styles.stepLine} /><View style={styles.step}><Text style={styles.stepCircleInactive}>3</Text><Text style={styles.stepLabel}>Kirim</Text></View><View style={styles.stepNote}><Text style={styles.stepNoteTitle}>Sampaikan dengan jelas.</Text><Text style={styles.stepNoteText}>Lengkapi detail, lokasi, lalu kirim laporan.</Text></View></View>
         {!!formFeedback && (
           <View style={[styles.feedbackBox, formFeedback.type === 'success' ? styles.successBox : styles.errorBox]} accessibilityRole="alert">
             <Text style={formFeedback.type === 'success' ? styles.successText : styles.errorText}>{formFeedback.message}</Text>
           </View>
         )}
 
-        <Text style={styles.label}>Kategori *</Text>
-        <View style={styles.optionList}>
+        <View style={[styles.formColumns, !desktop && styles.formColumnsMobile]}>
+          <View style={[styles.formPanel, { padding: desktop ? 22 : 16 }, desktop && styles.formPanelDesktop]}>
+            <Text style={styles.panelTitle}>01 Detail laporan</Text>
+            <Text style={styles.panelHint}>Ceritakan masalah di sekitar Anda.</Text>
+            <Text style={styles.label}>Kategori *</Text>
+            <View style={styles.optionList}>
           {KATEGORI_INFRASTRUKTUR.map((item) => (
-            <TouchableOpacity key={item} accessibilityRole="radio" accessibilityState={{ checked: category === item }} style={[styles.option, category === item && styles.optionSelected]} onPress={() => setCategory(item)} disabled={busy}>
+            <TouchableOpacity key={item} accessibilityRole="radio" accessibilityState={{ checked: category === item }} style={[styles.option, !desktop && styles.optionMobile, category === item && styles.optionSelected]} onPress={() => setCategory(item)} disabled={busy}>
               <Text style={[styles.optionText, category === item && styles.optionTextSelected]}>{item}</Text>
             </TouchableOpacity>
           ))}
         </View>
 
-        <Text style={styles.label}>Deskripsi kerusakan *</Text>
-        <TextInput style={[styles.input, styles.multiline]} value={description} onChangeText={setDescription} placeholder="Jelaskan kondisi dan bagian yang rusak" multiline maxLength={2000} editable={!busy} />
+            <Text style={styles.label}>Deskripsi kerusakan *</Text>
+            <TextInput style={[styles.input, styles.multiline]} value={description} onChangeText={setDescription} placeholder="Jelaskan kondisi dan bagian yang rusak" multiline maxLength={2000} editable={!busy} />
 
-        <Text style={styles.label}>Urgensi menurut Anda *</Text>
+            <Text style={styles.label}>Urgensi menurut Anda *</Text>
         <View style={styles.chipRow}>
           {urgencies.map((item) => (
             <TouchableOpacity key={item.value} accessibilityRole="radio" accessibilityState={{ checked: urgency === item.value }} style={[styles.chip, urgency === item.value && styles.chipSelected]} onPress={() => setUrgency(item.value)} disabled={busy}>
@@ -288,10 +301,13 @@ export default function BuatLaporanScreen() {
             </TouchableOpacity>
           ))}
         </View>
-        <Text style={styles.hint}>Ini hanya masukan awal. Prioritas akhir ditetapkan admin setelah verifikasi.</Text>
+            <Text style={styles.hint}>Ini hanya masukan awal. Prioritas akhir ditetapkan admin setelah verifikasi.</Text>
+          </View>
 
-        <Text style={styles.label}>Foto kerusakan * (minimal 1, maksimal 3)</Text>
-        <Text style={styles.hint}>JPG/PNG, total maksimal 10 MB. Foto diperlukan sebagai bukti laporan.</Text>
+          <View style={[styles.formPanel, { padding: desktop ? 22 : 16 }, desktop && styles.formPanelDesktop]}>
+            <Text style={styles.panelTitle}>02 Foto & lokasi</Text>
+            <Text style={styles.label}>Foto kerusakan * (minimal 1, maksimal 3)</Text>
+            <Text style={styles.hint}>JPG/PNG, total maksimal 10 MB. Foto diperlukan sebagai bukti laporan.</Text>
         <TouchableOpacity style={styles.secondaryButton} onPress={pickPhotos} disabled={busy || photos.length >= MAX_IMAGE_COUNT}>
           <Text style={styles.secondaryButtonText}>Pilih foto dari galeri ({photos.length}/{MAX_IMAGE_COUNT})</Text>
         </TouchableOpacity>
@@ -310,58 +326,76 @@ export default function BuatLaporanScreen() {
         </View>
         <Text style={styles.hint}>Total: {(photoBytes / (1024 * 1024)).toFixed(2)} / 10 MB</Text>
 
-        <Text style={styles.label}>Lokasi GPS (opsional)</Text>
-        <Text style={styles.hint}>GPS hanya informasi tambahan; jika izin ditolak, laporan tetap dapat dikirim memakai patokan lokasi.</Text>
+            <Text style={styles.label}>Lokasi GPS (opsional)</Text>
+            <Text style={styles.hint}>GPS hanya informasi tambahan; jika izin ditolak, laporan tetap dapat dikirim memakai patokan lokasi.</Text>
         <TouchableOpacity style={styles.secondaryButton} onPress={captureLocation} disabled={busy}>
           <Text style={styles.secondaryButtonText}>{location ? 'Ambil ulang lokasi GPS' : 'Ambil lokasi GPS'}</Text>
         </TouchableOpacity>
         <Text style={styles.locationText}>{locationMessage}</Text>
 
-        <Text style={styles.label}>Patokan lokasi * (wajib)</Text>
-        <TextInput style={styles.input} value={landmark} onChangeText={setLandmark} placeholder="Contoh: depan masjid RT 02" maxLength={250} editable={!busy} />
+            <Text style={styles.label}>Patokan lokasi * (wajib)</Text>
+            <TextInput style={styles.input} value={landmark} onChangeText={setLandmark} placeholder="Contoh: depan masjid RT 02" maxLength={250} editable={!busy} />
+          </View>
+        </View>
 
-        <TouchableOpacity style={[styles.submitButton, busy && styles.disabledButton]} onPress={submitReport} disabled={busy}>
+        <TouchableOpacity style={[styles.submitButton, !desktop && styles.submitButtonMobile, busy && styles.disabledButton]} onPress={submitReport} disabled={busy}>
           {busy ? <ActivityIndicator color="#fff" /> : <Text style={styles.submitText}>Kirim Laporan</Text>}
         </TouchableOpacity>
       </ScrollView>
-    </KeyboardAvoidingView>
+      </KeyboardAvoidingView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  flex: { flex: 1 },
-  container: { flex: 1, backgroundColor: '#f5f7fa' },
-  content: { padding: 20, paddingBottom: 40 },
-  title: { fontSize: 26, fontWeight: '700', color: '#1f2937', marginBottom: 6 },
-  subtitle: { color: '#64748b', marginBottom: 20 },
-  label: { color: '#1f2937', fontSize: 15, fontWeight: '600', marginTop: 18, marginBottom: 8 },
-  hint: { color: '#64748b', fontSize: 13, lineHeight: 19, marginBottom: 8 },
-  optionList: { gap: 8 },
-  option: { padding: 13, borderWidth: 1, borderColor: '#cbd5e1', borderRadius: 9, backgroundColor: '#fff' },
-  optionSelected: { borderColor: '#1976d2', backgroundColor: '#eaf3ff' },
-  optionText: { color: '#334155' },
-  optionTextSelected: { color: '#1259a7', fontWeight: '600' },
-  input: { backgroundColor: '#fff', borderColor: '#cbd5e1', borderWidth: 1, borderRadius: 9, padding: 12, color: '#1f2937', fontSize: 15 },
-  multiline: { minHeight: 105, textAlignVertical: 'top' },
+  flex: { flex: 1, backgroundColor: 'transparent' },
+  container: { flex: 1, backgroundColor: 'transparent' },
+  content: { paddingHorizontal: 0, paddingTop: 18, paddingBottom: 24, width: '100%', alignSelf: 'center' },
+  stepCard: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 10, borderRadius: CITIZEN_RADIUS.card, padding: 16, marginBottom: 16, backgroundColor: C.surface, borderWidth: 1, borderColor: C.cardBorder, ...CITIZEN_CARD_SHADOW },
+  step: { alignItems: 'center', gap: 4 },
+  stepCircle: { width: 38, height: 38, borderRadius: 20, backgroundColor: '#BDE5FF', color: C.text, textAlign: 'center', textAlignVertical: 'center', fontWeight: '700', lineHeight: 38 },
+  stepCircleInactive: { width: 38, height: 38, borderRadius: 20, backgroundColor: '#E8F2FC', color: C.muted, textAlign: 'center', textAlignVertical: 'center', fontWeight: '700', lineHeight: 38 },
+  stepLabel: { color: C.muted, fontSize: 10 },
+  stepLine: { height: 1, width: 18, backgroundColor: '#B9D7EA', marginBottom: 16 },
+  stepNote: { flex: 1, flexBasis: 180, minWidth: 160, marginLeft: 4 },
+  stepNoteTitle: { color: C.text, fontSize: 12, fontWeight: '700' },
+  stepNoteText: { color: C.muted, fontSize: 10, marginTop: 4, lineHeight: 15 },
+  formColumns: { flexDirection: 'row', alignItems: 'stretch', gap: 18 },
+  formColumnsMobile: { flexDirection: 'column', alignItems: 'stretch', gap: 14 },
+  formPanel: { alignSelf: 'stretch', minWidth: 0, borderRadius: CITIZEN_RADIUS.card, padding: 20, backgroundColor: C.surface, borderWidth: 1, borderColor: C.cardBorder, ...CITIZEN_CARD_SHADOW },
+  formPanelDesktop: { flex: 1 },
+  panelTitle: { color: C.text, fontSize: 17, fontWeight: '800', marginBottom: 8 },
+  panelHint: { color: C.muted, fontSize: 12, marginBottom: 4 },
+  label: { color: C.text, fontSize: 14, fontWeight: '700', marginTop: 19, marginBottom: 8 },
+  hint: { color: C.muted, fontSize: 13, lineHeight: 19, marginBottom: 8 },
+  optionList: { gap: 8, flexDirection: 'row', flexWrap: 'wrap' },
+  option: { minHeight: 48, justifyContent: 'center', flexGrow: 1, flexBasis: 128, paddingHorizontal: 14, paddingVertical: 11, borderWidth: 1, borderColor: C.cardBorder, borderRadius: CITIZEN_RADIUS.inner, backgroundColor: C.surfaceSubtle },
+  optionSelected: { borderColor: C.primaryStrong, backgroundColor: C.primarySoft },
+  optionMobile: { flexBasis: '100%' },
+  optionText: { color: C.textBody, fontSize: 13, fontWeight: '600', textAlign: 'center' },
+  optionTextSelected: { color: C.primaryStrong, fontWeight: '800' },
+  input: { backgroundColor: C.input, borderColor: C.inputBorder, borderWidth: 1, borderRadius: CITIZEN_RADIUS.field, padding: 13, minHeight: 48, color: C.text, fontSize: 15 },
+  multiline: { minHeight: 112, textAlignVertical: 'top' },
   chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  chip: { borderRadius: 20, borderWidth: 1, borderColor: '#cbd5e1', paddingHorizontal: 14, paddingVertical: 9, backgroundColor: '#fff' },
-  chipSelected: { borderColor: '#1976d2', backgroundColor: '#eaf3ff' },
-  chipText: { color: '#334155' },
-  chipTextSelected: { color: '#1259a7', fontWeight: '600' },
-  secondaryButton: { borderWidth: 1, borderColor: '#1976d2', borderRadius: 9, padding: 13, alignItems: 'center', backgroundColor: '#fff', marginVertical: 4 },
-  secondaryButtonText: { color: '#1259a7', fontWeight: '600' },
+  chip: { minHeight: 42, justifyContent: 'center', borderRadius: CITIZEN_RADIUS.pill, borderWidth: 1, borderColor: C.cardBorder, paddingHorizontal: 15, backgroundColor: C.surfaceSubtle },
+  chipSelected: { borderColor: C.primaryStrong, backgroundColor: C.primarySoft },
+  chipText: { color: C.textBody, fontWeight: '600' },
+  chipTextSelected: { color: C.primaryStrong, fontWeight: '800' },
+  secondaryButton: { borderWidth: 1, borderColor: '#B9DDF8', borderRadius: CITIZEN_RADIUS.field, minHeight: 48, justifyContent: 'center', paddingHorizontal: 16, alignItems: 'center', backgroundColor: C.surface, marginVertical: 4 },
+  secondaryButtonText: { color: C.primaryStrong, fontWeight: '700' },
   photoList: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginTop: 8 },
-  photoItem: { width: 100, backgroundColor: '#fff', borderRadius: 8, padding: 5 },
-  photo: { width: 90, height: 90, borderRadius: 6 },
-  photoInfo: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 4 },
-  removeText: { color: '#c62828', fontSize: 12, fontWeight: '600' },
-  locationText: { color: '#334155', fontSize: 13, lineHeight: 19, marginTop: 8 },
-  feedbackBox: { borderWidth: 1, borderRadius: 9, padding: 12, marginBottom: 12 },
-  errorBox: { backgroundColor: '#FDECEA', borderColor: '#F44336' },
-  successBox: { backgroundColor: '#E8F5E9', borderColor: '#4CAF50' },
-  errorText: { color: '#B71C1C', fontSize: 14, lineHeight: 20 },
-  successText: { color: '#1B5E20', fontSize: 14, lineHeight: 20 },
-  submitButton: { backgroundColor: '#1976d2', borderRadius: 10, alignItems: 'center', padding: 16, marginTop: 28 },
-  disabledButton: { opacity: 0.65 },
-  submitText: { color: '#fff', fontSize: 16, fontWeight: '700' },
+  photoItem: { width: 110, backgroundColor: C.surfaceSubtle, borderRadius: CITIZEN_RADIUS.inner, padding: 7, borderWidth: 1, borderColor: C.cardBorder },
+  photo: { width: 96, height: 96, borderRadius: 10 },
+  photoInfo: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 4, gap: 6 },
+  removeText: { color: C.danger, fontSize: 12, fontWeight: '700', minHeight: 32, textAlignVertical: 'center' },
+  locationText: { color: C.textBody, fontSize: 13, lineHeight: 20, marginTop: 8, padding: 13, borderRadius: CITIZEN_RADIUS.inner, borderWidth: 1, borderColor: C.cardBorder, backgroundColor: C.surfaceSubtle },
+  feedbackBox: { borderWidth: 1, borderRadius: CITIZEN_RADIUS.inner, padding: 12, marginBottom: 12 },
+  errorBox: { backgroundColor: C.dangerSoft, borderColor: '#F2C9CF' },
+  successBox: { backgroundColor: C.successSoft, borderColor: '#BFE7D4' },
+  errorText: { color: C.danger, fontSize: 14, lineHeight: 20 },
+  successText: { color: C.success, fontSize: 14, lineHeight: 20 },
+  submitButton: { backgroundColor: C.black, borderRadius: CITIZEN_RADIUS.pill, minHeight: 50, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 28, minWidth: 150, alignSelf: 'flex-end', marginTop: 18, ...CITIZEN_CARD_SHADOW },
+  submitButtonMobile: { alignSelf: 'stretch', width: '100%' },
+  disabledButton: { opacity: 0.55 },
+  submitText: { color: C.white, fontSize: 15, fontWeight: '700' },
 });

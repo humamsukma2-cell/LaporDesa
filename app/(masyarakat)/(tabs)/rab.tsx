@@ -4,6 +4,8 @@ import { useFocusEffect } from 'expo-router';
 import { formatDateTime } from '@/lib/laporan-ui';
 import { formatRupiah, openRabPdf } from '@/lib/rab';
 import { supabase } from '@/lib/supabase';
+import { CITIZEN_CARD_SHADOW, CITIZEN_COLORS as C, CITIZEN_RADIUS } from '@/lib/masyarakat-theme';
+import { useMasyarakatShell, MasyarakatPageHeader } from '@/components/MasyarakatShell';
 
 type PublicRab = {
   rab_id: string;
@@ -19,6 +21,7 @@ type PublicRab = {
 };
 
 export default function RabWargaScreen() {
+  const { desktop } = useMasyarakatShell();
   const [items, setItems] = useState<PublicRab[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -60,31 +63,53 @@ export default function RabWargaScreen() {
   }
 
   if (loading && !refreshing) {
-    return <View style={styles.center}><ActivityIndicator size="large" color="#1976D2" /></View>;
+    return <View style={styles.center}><ActivityIndicator size="large" color={C.primaryStrong} /></View>;
   }
+
+  const pad = desktop ? 40 : 16;
 
   return (
     <View style={styles.container}>
-      <Text style={styles.title}>Transparansi RAB</Text>
-      <Text style={styles.subtitle}>RAB yang diterbitkan dapat dilihat oleh semua warga yang login. Informasi laporan pelapor tidak ditampilkan di sini.</Text>
-      {!!error && <Text style={styles.error}>{error}</Text>}
+      <MasyarakatPageHeader
+        eyebrow="TRANSPARANSI ANGGARAN"
+        title="RAB"
+        subtitle="Rencana anggaran biaya yang sudah diterbitkan."
+        note="Buka dokumen PDF untuk melihat rincian biaya."
+      />
+      {!!error && <Text style={[styles.error, { marginHorizontal: pad }]}>{error}</Text>}
+      {items.length > 0 && (
+        <View style={[styles.rabHero, !desktop && styles.rabHeroMobile, { marginHorizontal: pad }]}>
+          <View style={styles.heroCopy}>
+            <Text style={styles.heroTitle}>Anggaran terbuka, desa terpercaya.</Text>
+            <Text style={styles.heroSubtitle}>Pantau rencana biaya dan dokumen penanganan laporan Anda.</Text>
+          </View>
+          <View style={[styles.heroAmountWrap, !desktop && styles.heroAmountWrapMobile]}>
+            <Text style={[styles.heroAmount, !desktop && styles.heroAmountMobile]}>{formatRupiah(items.reduce((sum, item) => sum + Number(item.total_anggaran || 0), 0))}</Text>
+            <Text style={styles.heroSubtitle}>{items.length} dokumen RAB tersedia</Text>
+          </View>
+        </View>
+      )}
       <FlatList
         data={items}
         keyExtractor={(item) => item.rab_id}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => void load(true)} />}
-        contentContainerStyle={items.length ? styles.list : styles.emptyList}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => void load(true)} tintColor={C.primaryStrong} />}
+        contentContainerStyle={[items.length ? styles.list : styles.emptyList, { paddingHorizontal: pad }]}
+        numColumns={desktop ? 2 : 1}
+        columnWrapperStyle={desktop && items.length > 1 ? styles.rabColumns : undefined}
         ListEmptyComponent={<Text style={styles.empty}>Belum ada RAB yang diterbitkan.</Text>}
-        renderItem={({ item }) => (
-          <View style={styles.card}>
-            <Text style={styles.number}>{item.nomor_rab}</Text>
-            <Text style={styles.heading}>{item.judul}</Text>
-            <View style={styles.row}><Text style={styles.label}>Anggaran</Text><Text style={styles.amount}>{formatRupiah(item.total_anggaran)}</Text></View>
+        renderItem={({ item, index }) => (
+          <View style={[styles.card, { padding: desktop ? 20 : 16 }, desktop && styles.cardDesktop]}>
+            <Text style={styles.number}>{index === 0 ? 'DOKUMEN TERBARU' : 'PDF'} · #{item.nomor_rab}</Text>
+            <View style={[styles.rabCardHeader, !desktop && styles.rabCardHeaderMobile]}>
+              <View style={[styles.rabCardCopy, desktop && styles.rabCardCopyDesktop]}><Text style={[styles.heading, !desktop && styles.headingMobile]}>{item.judul}</Text><Text style={styles.date}>Diterbitkan {formatDateTime(item.published_at ?? '')}</Text></View>
+              <TouchableOpacity style={[styles.button, !desktop && styles.buttonMobile]} onPress={() => void handleOpen(item)} disabled={openingId === item.rab_id || !item.path_pdf}>
+                {openingId === item.rab_id ? <ActivityIndicator color={C.white} /> : <Text style={styles.buttonText}>Unduh PDF</Text>}
+              </TouchableOpacity>
+            </View>
+            <View style={styles.breakdownHead}><Text style={styles.number}>RINCIAN ANGGARAN</Text><Text style={styles.number}>JUMLAH</Text></View>
             <View style={styles.row}><Text style={styles.label}>Sumber dana</Text><Text style={styles.value}>{item.sumber_dana}</Text></View>
-            {!!item.catatan && <View style={styles.noteBox}><Text style={styles.label}>Catatan</Text><Text style={styles.value}>{item.catatan}</Text></View>}
-            {!!item.published_at && <Text style={styles.date}>Diterbitkan {formatDateTime(item.published_at)}</Text>}
-            <TouchableOpacity style={styles.button} onPress={() => void handleOpen(item)} disabled={openingId === item.rab_id || !item.path_pdf}>
-              {openingId === item.rab_id ? <ActivityIndicator color="#fff" /> : <Text style={styles.buttonText}>Buka PDF RAB</Text>}
-            </TouchableOpacity>
+            {!!item.catatan && <View style={styles.row}><Text style={styles.label}>Catatan</Text><Text style={styles.value}>{item.catatan}</Text></View>}
+            <View style={styles.totalRow}><Text style={styles.totalLabel}>Total anggaran</Text><Text style={styles.amount}>{formatRupiah(item.total_anggaran)}</Text></View>
           </View>
         )}
       />
@@ -93,15 +118,35 @@ export default function RabWargaScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#F4F7FB', paddingHorizontal: 16, paddingTop: 18 },
-  center: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#F4F7FB' },
-  title: { color: '#1E293B', fontSize: 23, fontWeight: '800' },
-  subtitle: { color: '#64748B', fontSize: 13, lineHeight: 19, marginTop: 6, marginBottom: 12 },
-  list: { paddingBottom: 28 }, emptyList: { flexGrow: 1, justifyContent: 'center', paddingBottom: 32 },
-  card: { backgroundColor: '#fff', borderWidth: 1, borderColor: '#E2E8F0', borderRadius: 12, padding: 15, marginBottom: 12 },
-  number: { color: '#1976D2', fontWeight: '800', fontSize: 12 }, heading: { color: '#1E293B', fontSize: 17, fontWeight: '800', marginTop: 5, marginBottom: 12 },
-  row: { flexDirection: 'row', justifyContent: 'space-between', gap: 12, paddingVertical: 5 }, label: { color: '#64748B', fontSize: 13 }, value: { color: '#1E293B', fontWeight: '600', textAlign: 'right', flex: 1 },
-  amount: { color: '#1259A7', fontWeight: '800', textAlign: 'right', flex: 1 }, noteBox: { borderTopWidth: 1, borderTopColor: '#E2E8F0', marginTop: 8, paddingTop: 9, gap: 4 }, date: { color: '#64748B', fontSize: 12, marginTop: 8 },
-  button: { backgroundColor: '#1976D2', borderRadius: 9, padding: 12, alignItems: 'center', marginTop: 12 }, buttonText: { color: '#fff', fontWeight: '700' },
-  empty: { textAlign: 'center', color: '#64748B', lineHeight: 20 }, error: { color: '#B91C1C', backgroundColor: '#FEE2E2', borderRadius: 8, padding: 10, marginBottom: 8 },
+  container: { flex: 1, backgroundColor: 'transparent' },
+  center: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: 'transparent' },
+  rabHero: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 18, borderRadius: CITIZEN_RADIUS.card, padding: 24, marginTop: 18, marginBottom: 16, backgroundColor: C.surface, borderWidth: 1, borderColor: C.cardBorder, ...CITIZEN_CARD_SHADOW },
+  rabHeroMobile: { flexDirection: 'column', alignItems: 'flex-start', gap: 16, padding: 16 },
+  heroCopy: { flexShrink: 1 },
+  heroTitle: { color: C.text, fontSize: 22, fontWeight: '800', lineHeight: 29 },
+  heroSubtitle: { color: C.muted, fontSize: 11, marginTop: 5, lineHeight: 17 },
+  heroAmountWrap: { alignItems: 'flex-end', flexShrink: 0 },
+  heroAmountWrapMobile: { alignItems: 'flex-start' },
+  heroAmount: { color: C.text, fontSize: 25, fontWeight: '800' },
+  heroAmountMobile: { fontSize: 22, lineHeight: 28 },
+  list: { paddingBottom: 24, width: '100%' }, emptyList: { flexGrow: 1, justifyContent: 'center', paddingBottom: 32 },
+  rabColumns: { gap: 18 },
+  card: { alignSelf: 'stretch', minWidth: 0, backgroundColor: C.surface, borderWidth: 1, borderColor: C.cardBorder, borderRadius: CITIZEN_RADIUS.card, padding: 20, marginBottom: 14, ...CITIZEN_CARD_SHADOW },
+  cardDesktop: { flex: 1 },
+  number: { color: '#49647C', fontWeight: '800', fontSize: 9, letterSpacing: 0.4 },
+  rabCardHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 14, marginTop: 8 },
+  rabCardHeaderMobile: { flexDirection: 'column', alignItems: 'stretch', gap: 14 },
+  rabCardCopy: { minWidth: 0 },
+  rabCardCopyDesktop: { flex: 1 },
+  heading: { color: C.text, fontSize: 20, fontWeight: '800', lineHeight: 27 },
+  headingMobile: { fontSize: 18, lineHeight: 24 },
+  breakdownHead: { flexDirection: 'row', justifyContent: 'space-between', gap: 12, marginTop: 25, paddingBottom: 8 },
+  row: { flexDirection: 'row', justifyContent: 'space-between', gap: 12, paddingVertical: 8 },
+  label: { color: C.textBody, fontSize: 13, flexShrink: 1 }, value: { color: C.text, fontWeight: '600', textAlign: 'right', flex: 1, lineHeight: 19 },
+  amount: { color: C.text, fontWeight: '800', textAlign: 'right', fontSize: 19, flexShrink: 1 },
+  totalRow: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'center', gap: 8, borderTopWidth: 1, borderTopColor: C.cardBorderSoft, marginTop: 13, paddingTop: 15 },
+  totalLabel: { color: C.text, fontSize: 13, fontWeight: '700' },
+  date: { color: C.muted, fontSize: 10, marginTop: 7 },
+  button: { backgroundColor: C.black, borderRadius: CITIZEN_RADIUS.pill, minHeight: 44, minWidth: 140, paddingHorizontal: 20, justifyContent: 'center', alignItems: 'center' }, buttonMobile: { minWidth: 0, width: '100%' }, buttonText: { color: C.white, fontWeight: '700', fontSize: 12 },
+  empty: { textAlign: 'center', color: C.muted, lineHeight: 20 }, error: { color: C.danger, backgroundColor: C.dangerSoft, borderRadius: 12, padding: 12, marginBottom: 8 },
 });

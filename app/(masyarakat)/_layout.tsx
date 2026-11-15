@@ -3,6 +3,7 @@ import { useRouter } from 'expo-router';
 import { Stack } from 'expo-router';
 import { useAuth } from '@/contexts/AuthContext';
 import { View, ActivityIndicator, StyleSheet } from 'react-native';
+import { MasyarakatShell } from '@/components/MasyarakatShell';
 
 export default function MasyarakatLayout() {
   const { profile, loading } = useAuth();
@@ -23,10 +24,12 @@ export default function MasyarakatLayout() {
   }
 
   return (
-    <Stack screenOptions={{ headerShown: false }}>
-      <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-      <Stack.Screen name="detail/[id]" options={{ headerShown: true, title: 'Detail Laporan' }} />
-    </Stack>
+    <MasyarakatShell>
+      <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: 'transparent' } }}>
+        <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+        <Stack.Screen name="detail/[id]" options={{ headerShown: false }} />
+      </Stack>
+    </MasyarakatShell>
   );
 }
 
@@ -35,6 +38,6 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#fff',
+    backgroundColor: '#F3F8FD',
   },
 });

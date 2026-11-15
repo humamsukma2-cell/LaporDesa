@@ -1,5 +1,5 @@
 import React, { useCallback, useState } from 'react';
-import { ActivityIndicator, Image, Linking, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Image, Linking, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View, useWindowDimensions } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
@@ -7,6 +7,8 @@ import { priorityMeta, describeError } from '@/lib/laporan-ui';
 import { fetchPublishedRab, type RabWithVersion } from '@/lib/rab';
 import { RabPanel } from '@/components/RabPanel';
 import type { StatusLaporanType, TingkatType } from '@/types';
+import { CITIZEN_CARD_SHADOW, CITIZEN_COLORS as C, CITIZEN_RADIUS } from '@/lib/masyarakat-theme';
+import { useMasyarakatShell } from '@/components/MasyarakatShell';
 
 type ReportDetail = {
   id: string;
@@ -41,6 +43,9 @@ function formatDate(value: string) {
 }
 
 export default function DetailLaporanScreen() {
+  const { desktop } = useMasyarakatShell();
+  const { width } = useWindowDimensions();
+  const twoColumn = width >= 1200;
   const { id: rawId } = useLocalSearchParams<{ id: string | string[] }>();
   const id = Array.isArray(rawId) ? rawId[0] : rawId;
   const router = useRouter();
@@ -182,64 +187,53 @@ export default function DetailLaporanScreen() {
     }
   }
 
-  if (loading) return <View style={styles.center}><ActivityIndicator size="large" color="#1976D2" /><Text style={styles.muted}>Memuat detail laporan…</Text></View>;
+  if (loading) return <View style={styles.center}><ActivityIndicator size="large" color={C.primaryStrong} /><Text style={styles.muted}>Memuat detail laporan…</Text></View>;
   if (errorMessage && !report) return <View style={styles.center}><Text style={styles.errorTitle}>Detail belum dapat ditampilkan</Text><Text style={styles.errorText}>{errorMessage}</Text><TouchableOpacity style={styles.button} onPress={() => void loadDetail()}><Text style={styles.buttonText}>Coba lagi</Text></TouchableOpacity><TouchableOpacity onPress={() => router.back()}><Text style={styles.backLink}>Kembali</Text></TouchableOpacity></View>;
   if (!report) return null;
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.content}>
+    <ScrollView style={styles.container} contentContainerStyle={[styles.content, { paddingHorizontal: desktop ? 40 : 16 }]}>
+      <View style={[styles.pageHeading, !desktop && styles.pageHeadingMobile]}><TouchableOpacity onPress={() => router.back()}><Text style={styles.backLink}>← Kembali ke Riwayat</Text></TouchableOpacity><Text style={styles.reportMeta}>Portal warga / Detail Laporan</Text><Text style={[styles.code, !desktop && styles.codeMobile]}>{report.deskripsi.split(/[.!?]/)[0].slice(0, 70) || report.kode_laporan}</Text><Text style={styles.reportMeta}>{report.kode_laporan} · {formatDate(report.created_at)}</Text></View>
       {!!errorMessage && <View style={styles.inlineError}><Text style={styles.errorText}>{errorMessage}</Text></View>}
-      <Text style={styles.code}>{report.kode_laporan}</Text>
-      <View style={styles.statusBox}><Text style={styles.statusLabel}>Status saat ini</Text><Text style={styles.statusValue}>{STATUS[report.status] ?? report.status}</Text></View>
-      {report.status === 'needs_information' && (
-        <View style={styles.warningBox}>
-          <Text style={styles.warningText}>Admin meminta informasi tambahan. Lengkapi jawaban pada bagian “Permintaan informasi dari admin” di bawah.</Text>
-        </View>
-      )}
 
-      <Text style={styles.sectionTitle}>Informasi laporan</Text>
-      <Info label="Kategori" value={(Array.isArray(report.kategori) ? report.kategori[0]?.nama : report.kategori?.nama) ?? 'Tidak tersedia'} />
-      <Info label="Tanggal dikirim" value={formatDate(report.created_at)} />
-      <Info label="Urgensi pelapor" value={URGENCY[report.urgensi_pelapor] ?? report.urgensi_pelapor} />
-      <Info label="Deskripsi" value={report.deskripsi} />
-      <Info label="Patokan lokasi" value={report.patokan_lokasi} />
-      {report.latitude != null && report.longitude != null ? (
-        <View style={styles.locationBox}>
-          <Text style={styles.body}>Koordinat: {report.latitude.toFixed(6)}, {report.longitude.toFixed(6)}</Text>
-          {report.akurasi_gps != null && <Text style={styles.muted}>Akurasi ±{Math.round(report.akurasi_gps)} m</Text>}
-          <TouchableOpacity onPress={() => void openCoordinates()}><Text style={styles.link}>Buka lokasi di peta</Text></TouchableOpacity>
-        </View>
-      ) : <Info label="Lokasi GPS" value="Tidak disertakan" />}
-
-      <Text style={styles.sectionTitle}>Foto laporan</Text>
-      {photos.length === 0 ? <Text style={styles.muted}>Belum ada foto yang tercatat.</Text> : (
-        <View style={styles.photoGrid}>{photos.map((photo) => (
-          <View key={photo.id} style={styles.photoCard}>
-            {photo.url ? <Image source={{ uri: photo.url }} style={styles.photo} resizeMode="cover" /> : <View style={[styles.photo, styles.photoUnavailable]}><Text style={styles.muted}>Foto tidak dapat dimuat</Text></View>}
-            <Text style={styles.photoCaption}>{photo.jenis === 'hasil_penanganan' ? 'Foto hasil' : 'Foto awal'}</Text>
-          </View>
-        ))}</View>
-      )}
-
-      <Text style={styles.sectionTitle}>Prioritas penanganan</Text>
-      {priority ? (
-        <View style={styles.locationBox}>
-          <Text style={styles.statusLabel}>Prioritas yang ditetapkan admin</Text>
-          <Text style={[styles.priorityValue, { color: priorityMeta(priority.prioritas_akhir).color }]}>
-            {priorityMeta(priority.prioritas_akhir).label}
-          </Text>
-          <Text style={styles.body}>Skor penilaian: {Number(priority.skor_rekomendasi).toFixed(2)} dari 5,00</Text>
-          {!!priority.catatan_override && (
-            <Text style={styles.body}>Alasan penetapan admin: {priority.catatan_override}</Text>
+      <View style={[styles.detailColumns, !twoColumn && styles.detailColumnsMobile]}>
+        <View style={[styles.detailMainPanel, { padding: desktop ? 20 : 16 }, twoColumn && styles.detailMainPanelWide]}>
+          <Text style={[styles.sectionTitle, styles.sectionTitleFirst]}>Foto & deskripsi laporan</Text>
+          {photos.length === 0 ? <Text style={styles.muted}>Belum ada foto yang tercatat.</Text> : (
+            <View style={styles.photoGrid}>{photos.map((photo) => (
+              <View key={photo.id} style={styles.photoCard}>
+                {photo.url ? <Image source={{ uri: photo.url }} style={styles.photo} resizeMode="cover" /> : <View style={[styles.photo, styles.photoUnavailable]}><Text style={styles.muted}>Foto tidak dapat dimuat</Text></View>}
+                <Text style={styles.photoCaption}>{photo.jenis === 'hasil_penanganan' ? 'Foto hasil' : 'Foto awal'}</Text>
+              </View>
+            ))}</View>
           )}
-          <Text style={styles.muted}>Dinilai {formatDate(priority.created_at)}. Keputusan akhir tetap pada pihak berwenang.</Text>
+          <Text style={styles.sectionTitle}>Deskripsi laporan</Text>
+          <Text style={styles.body}>{report.deskripsi}</Text>
+          <Text style={styles.sectionTitle}>Perkembangan laporan</Text>
+          {history.length === 0 ? <Text style={styles.muted}>Riwayat status belum tersedia.</Text> : history.map((entry) => (
+            <View key={entry.id} style={styles.timelineItem}><View style={styles.timelineDot} /><View style={styles.timelineContent}><Text style={styles.historyStatus}>{entry.status_lama ? `${STATUS[entry.status_lama]} → ` : ''}{STATUS[entry.status_baru] ?? entry.status_baru}</Text><Text style={styles.muted}>{formatDate(entry.waktu)}</Text>{!!entry.catatan && <Text style={styles.body}>{entry.catatan}</Text>}</View></View>
+          ))}
         </View>
-      ) : (
-        <Text style={styles.muted}>Prioritas belum ditetapkan. Admin akan menilai setelah laporan diverifikasi.</Text>
-      )}
-
-      <Text style={styles.sectionTitle}>Rencana Anggaran Biaya (RAB)</Text>
-      <RabPanel data={rab} />
+        <View style={[styles.detailSide, twoColumn && styles.detailSideWide]}>
+          <View style={[styles.sidePanel, { padding: desktop ? 18 : 16 }]}><Text style={styles.sectionTitleCompact}>Status laporan</Text><Text style={styles.statusPill}>{STATUS[report.status] ?? report.status}</Text>{report.status === 'needs_information' && <Text style={styles.warningText}>Admin meminta informasi tambahan. Lengkapi jawaban di bagian bawah.</Text>}</View>
+          <View style={[styles.sidePanel, { padding: desktop ? 18 : 16 }]}>
+            <Text style={styles.sectionTitleCompact}>Informasi laporan</Text>
+            <Info label="Kategori" value={(Array.isArray(report.kategori) ? report.kategori[0]?.nama : report.kategori?.nama) ?? 'Tidak tersedia'} />
+            <Info label="Tanggal dikirim" value={formatDate(report.created_at)} />
+            <Info label="Urgensi pelapor" value={URGENCY[report.urgensi_pelapor] ?? report.urgensi_pelapor} />
+            <Info label="Lokasi" value={report.patokan_lokasi} />
+            {report.latitude != null && report.longitude != null && (
+              <>
+                <TouchableOpacity onPress={() => void openCoordinates()}><Text style={styles.link}>Buka lokasi di peta →</Text></TouchableOpacity>
+                <Text style={styles.muted}>Koordinat: {report.latitude.toFixed(6)}, {report.longitude.toFixed(6)}</Text>
+                {report.akurasi_gps != null && <Text style={styles.muted}>Akurasi ±{Math.round(report.akurasi_gps)} m</Text>}
+              </>
+            )}
+          </View>
+          <View style={[styles.sidePanel, { padding: desktop ? 18 : 16 }]}><Text style={styles.sectionTitleCompact}>Prioritas penanganan</Text>{priority ? <><Text style={[styles.priorityValue, { color: priorityMeta(priority.prioritas_akhir).color }]}>{priorityMeta(priority.prioritas_akhir).label}</Text><Text style={styles.body}>Skor penilaian: {Number(priority.skor_rekomendasi).toFixed(2)} dari 5,00</Text>{!!priority.catatan_override && <Text style={styles.body}>Alasan penetapan admin: {priority.catatan_override}</Text>}<Text style={styles.muted}>Dinilai {formatDate(priority.created_at)}. Keputusan akhir tetap pada pihak berwenang.</Text></> : <Text style={styles.muted}>Prioritas belum ditetapkan.</Text>}</View>
+          <View style={[styles.sidePanel, { padding: desktop ? 18 : 16 }]}><Text style={styles.sectionTitleCompact}>RAB terkait</Text><RabPanel data={rab} embedded /></View>
+        </View>
+      </View>
 
       {infoRequests.length > 0 && (
         <>
@@ -251,52 +245,14 @@ export default function DetailLaporanScreen() {
               <Text style={styles.requestMeta}>Diminta {formatDate(request.created_at)}</Text>
               <Text style={styles.body}>{request.permintaan}</Text>
               {request.jawaban ? (
-                <View style={styles.answerBox}>
-                  <Text style={styles.infoLabel}>Jawaban Anda</Text>
-                  <Text style={styles.body}>{request.jawaban}</Text>
-                  {!!request.dijawab_pada && <Text style={styles.muted}>Dikirim {formatDate(request.dijawab_pada)}</Text>}
-                </View>
+                <View style={styles.answerBox}><Text style={styles.infoLabel}>Jawaban Anda</Text><Text style={styles.body}>{request.jawaban}</Text>{!!request.dijawab_pada && <Text style={styles.muted}>Dikirim {formatDate(request.dijawab_pada)}</Text>}</View>
               ) : report.status === 'needs_information' ? (
-                <View>
-                  <Text style={styles.infoLabel}>Jawaban Anda (wajib)</Text>
-                  <TextInput
-                    style={styles.answerInput}
-                    value={answerDrafts[request.id] ?? ''}
-                    onChangeText={(text) => setAnswerDrafts((current) => ({ ...current, [request.id]: text }))}
-                    placeholder="Tuliskan informasi yang diminta admin"
-                    multiline
-                    maxLength={1500}
-                    editable={submittingAnswerId !== request.id}
-                  />
-                  <TouchableOpacity
-                    style={[styles.answerButton, submittingAnswerId === request.id && styles.answerButtonDisabled]}
-                    onPress={() => void submitAnswer(request.id)}
-                    disabled={submittingAnswerId === request.id}
-                  >
-                    {submittingAnswerId === request.id
-                      ? <ActivityIndicator color="#fff" />
-                      : <Text style={styles.answerButtonText}>Kirim jawaban</Text>}
-                  </TouchableOpacity>
-                </View>
-              ) : (
-                <Text style={styles.muted}>Belum dijawab. Permintaan hanya dapat dijawab saat status laporan “Perlu informasi”.</Text>
-              )}
+                <View><Text style={styles.infoLabel}>Jawaban Anda (wajib)</Text><TextInput style={styles.answerInput} value={answerDrafts[request.id] ?? ''} onChangeText={(text) => setAnswerDrafts((current) => ({ ...current, [request.id]: text }))} placeholder="Tuliskan informasi yang diminta admin" multiline maxLength={1500} editable={submittingAnswerId !== request.id} /><TouchableOpacity style={[styles.answerButton, submittingAnswerId === request.id && styles.answerButtonDisabled]} onPress={() => void submitAnswer(request.id)} disabled={submittingAnswerId === request.id}>{submittingAnswerId === request.id ? <ActivityIndicator color={C.white} /> : <Text style={styles.answerButtonText}>Kirim jawaban</Text>}</TouchableOpacity></View>
+              ) : <Text style={styles.muted}>Belum dijawab. Permintaan hanya dapat dijawab saat status laporan “Perlu informasi”.</Text>}
             </View>
           ))}
         </>
       )}
-
-      <Text style={styles.sectionTitle}>Riwayat status</Text>
-      {history.length === 0 ? <Text style={styles.muted}>Riwayat status belum tersedia.</Text> : history.map((entry) => (
-        <View key={entry.id} style={styles.timelineItem}>
-          <View style={styles.timelineDot} />
-          <View style={styles.timelineContent}>
-            <Text style={styles.historyStatus}>{entry.status_lama ? `${STATUS[entry.status_lama]} → ` : ''}{STATUS[entry.status_baru] ?? entry.status_baru}</Text>
-            <Text style={styles.muted}>{formatDate(entry.waktu)}</Text>
-            {!!entry.catatan && <Text style={styles.body}>{entry.catatan}</Text>}
-          </View>
-        </View>
-      ))}
     </ScrollView>
   );
 }
@@ -306,45 +262,59 @@ function Info({ label, value }: { label: string; value: string }) {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#F4F7FB' },
-  content: { padding: 18, paddingBottom: 36 },
-  center: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 28, backgroundColor: '#F4F7FB' },
-  code: { color: '#1E293B', fontSize: 20, fontWeight: '800', marginBottom: 14 },
-  statusBox: { backgroundColor: '#EAF3FF', padding: 15, borderRadius: 12, borderColor: '#BFDBFE', borderWidth: 1 },
-  statusLabel: { color: '#475569', fontSize: 13 },
-  statusValue: { color: '#1259A7', fontWeight: '800', fontSize: 17, marginTop: 4 },
-  sectionTitle: { color: '#1E293B', fontWeight: '800', fontSize: 17, marginTop: 24, marginBottom: 10 },
-  info: { backgroundColor: '#fff', padding: 13, borderRadius: 9, marginBottom: 8, borderWidth: 1, borderColor: '#E2E8F0' },
-  infoLabel: { color: '#64748B', fontSize: 12, marginBottom: 5 },
-  body: { color: '#334155', fontSize: 14, lineHeight: 21 },
-  locationBox: { backgroundColor: '#fff', padding: 13, borderRadius: 9, marginTop: 4, borderWidth: 1, borderColor: '#E2E8F0' },
-  link: { color: '#1976D2', fontWeight: '700', marginTop: 9 },
+  container: { flex: 1, backgroundColor: 'transparent' },
+  content: { paddingHorizontal: 0, paddingTop: 22, paddingBottom: 28, width: '100%', alignSelf: 'center' },
+  center: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 28, backgroundColor: C.background },
+  pageHeading: { marginBottom: 18 },
+  pageHeadingMobile: { marginBottom: 14 },
+  code: { color: C.text, fontSize: 27, fontWeight: '800', marginTop: 8, lineHeight: 35 },
+  codeMobile: { fontSize: 23, lineHeight: 30 },
+  reportMeta: { color: C.muted, fontSize: 11, marginTop: 5 },
+  detailColumns: { flexDirection: 'row', alignItems: 'flex-start', gap: 18 },
+  detailColumnsMobile: { flexDirection: 'column', alignItems: 'stretch', gap: 14 },
+  detailMainPanel: { alignSelf: 'stretch', minWidth: 0, borderRadius: CITIZEN_RADIUS.card, padding: 20, backgroundColor: C.surface, borderWidth: 1, borderColor: C.cardBorder, ...CITIZEN_CARD_SHADOW },
+  detailMainPanelWide: { flex: 1.6, alignSelf: 'flex-start' },
+  detailSide: { alignSelf: 'stretch', minWidth: 0, gap: 14 },
+  detailSideWide: { flex: 1, alignSelf: 'flex-start' },
+  sidePanel: { borderRadius: CITIZEN_RADIUS.card, padding: 18, backgroundColor: C.surface, borderWidth: 1, borderColor: C.cardBorder, ...CITIZEN_CARD_SHADOW },
+  sectionTitleCompact: { color: C.text, fontWeight: '800', fontSize: 15, marginBottom: 12 },
+  statusPill: { alignSelf: 'flex-start', overflow: 'hidden', color: '#1765A2', backgroundColor: '#DCEFFF', fontSize: 11, fontWeight: '700', paddingHorizontal: 13, paddingVertical: 7, borderRadius: CITIZEN_RADIUS.pill },
+  statusBox: { backgroundColor: C.primarySoft, padding: 16, borderRadius: CITIZEN_RADIUS.inner, borderColor: C.cardBorder, borderWidth: 1 },
+  statusLabel: { color: C.muted, fontSize: 13 },
+  statusValue: { color: C.primaryStrong, fontWeight: '800', fontSize: 17, marginTop: 4 },
+  sectionTitle: { color: C.text, fontWeight: '800', fontSize: 17, marginTop: 24, marginBottom: 10 },
+  sectionTitleFirst: { marginTop: 0 },
+  info: { paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: C.cardBorderSoft },
+  infoLabel: { color: C.muted, fontSize: 12, marginBottom: 5 },
+  body: { color: C.textBody, fontSize: 14, lineHeight: 21 },
+  locationBox: { backgroundColor: C.surfaceSubtle, padding: 14, borderRadius: CITIZEN_RADIUS.inner, marginTop: 4, borderWidth: 1, borderColor: C.cardBorder },
+  link: { color: C.primaryStrong, fontWeight: '700', marginTop: 9, minHeight: 36, textAlignVertical: 'center' },
   priorityValue: { fontSize: 19, fontWeight: '800', marginVertical: 6 },
-  warningBox: { backgroundColor: '#FEFCBF', borderWidth: 1, borderColor: '#D69E2E', borderRadius: 10, padding: 12, marginTop: 12 },
-  warningText: { color: '#7B341E', fontSize: 13, lineHeight: 20 },
-  requestBox: { backgroundColor: '#fff', borderRadius: 10, borderWidth: 1, borderColor: '#E2E8F0', padding: 13, marginBottom: 10 },
-  requestMeta: { color: '#64748B', fontSize: 12, marginBottom: 6 },
-  answerBox: { backgroundColor: '#F0FDF4', borderRadius: 8, padding: 10, marginTop: 10 },
-  answerInput: { backgroundColor: '#F8FAFC', borderWidth: 1, borderColor: '#CBD5E1', borderRadius: 9, padding: 11, minHeight: 85, textAlignVertical: 'top', color: '#1E293B', marginTop: 4 },
-  answerButton: { backgroundColor: '#1976D2', borderRadius: 9, padding: 13, alignItems: 'center', marginTop: 10 },
+  warningBox: { backgroundColor: C.warningSoft, borderWidth: 1, borderColor: '#E8D09B', borderRadius: CITIZEN_RADIUS.inner, padding: 14, marginTop: 12 },
+  warningText: { color: C.warning, fontSize: 13, lineHeight: 20 },
+  requestBox: { backgroundColor: C.surface, borderRadius: CITIZEN_RADIUS.card, borderWidth: 1, borderColor: C.cardBorder, padding: 16, marginBottom: 10, ...CITIZEN_CARD_SHADOW },
+  requestMeta: { color: C.muted, fontSize: 12, marginBottom: 6 },
+  answerBox: { backgroundColor: C.successSoft, borderRadius: CITIZEN_RADIUS.inner, padding: 12, marginTop: 10 },
+  answerInput: { backgroundColor: C.surfaceSubtle, borderWidth: 1, borderColor: C.inputBorder, borderRadius: CITIZEN_RADIUS.field, padding: 12, minHeight: 88, textAlignVertical: 'top', color: C.text, marginTop: 4 },
+  answerButton: { backgroundColor: C.black, borderRadius: CITIZEN_RADIUS.pill, minHeight: 48, justifyContent: 'center', paddingHorizontal: 18, alignItems: 'center', marginTop: 10 },
   answerButtonDisabled: { opacity: 0.6 },
-  answerButtonText: { color: '#fff', fontWeight: '700' },
-  successBox: { backgroundColor: '#C6F6D5', padding: 11, borderRadius: 8, marginBottom: 10 },
-  successText: { color: '#22543D', lineHeight: 20 },
+  answerButtonText: { color: C.white, fontWeight: '700' },
+  successBox: { backgroundColor: C.successSoft, padding: 12, borderRadius: CITIZEN_RADIUS.inner, marginBottom: 10 },
+  successText: { color: C.success, lineHeight: 20 },
   photoGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
-  photoCard: { width: '48%', backgroundColor: '#fff', padding: 6, borderRadius: 9 },
-  photo: { width: '100%', aspectRatio: 1, borderRadius: 6 },
-  photoUnavailable: { alignItems: 'center', justifyContent: 'center', padding: 8 },
-  photoCaption: { color: '#475569', fontSize: 12, margin: 6 },
-  timelineItem: { flexDirection: 'row', marginBottom: 16 },
-  timelineDot: { width: 11, height: 11, borderRadius: 6, backgroundColor: '#1976D2', marginTop: 4, marginRight: 11 },
-  timelineContent: { flex: 1, backgroundColor: '#fff', padding: 12, borderRadius: 9, borderWidth: 1, borderColor: '#E2E8F0' },
-  historyStatus: { color: '#1E293B', fontWeight: '700', marginBottom: 5 },
-  muted: { color: '#64748B', fontSize: 13, lineHeight: 20, marginTop: 6 },
-  errorTitle: { color: '#1E293B', fontSize: 18, fontWeight: '700', marginBottom: 8, textAlign: 'center' },
-  errorText: { color: '#B91C1C', textAlign: 'center', lineHeight: 21 },
-  button: { backgroundColor: '#1976D2', paddingHorizontal: 18, paddingVertical: 12, borderRadius: 9, marginTop: 16 },
-  buttonText: { color: '#fff', fontWeight: '700' },
-  backLink: { color: '#1976D2', fontWeight: '700', marginTop: 16 },
-  inlineError: { backgroundColor: '#FEE2E2', padding: 10, borderRadius: 8, marginBottom: 12 },
+  photoCard: { flexGrow: 1, flexBasis: 140, maxWidth: '100%', padding: 0 },
+  photo: { width: '100%', aspectRatio: 1, borderRadius: CITIZEN_RADIUS.inner },
+  photoUnavailable: { alignItems: 'center', justifyContent: 'center', padding: 8, backgroundColor: C.surfaceSubtle },
+  photoCaption: { color: C.muted, fontSize: 12, marginTop: 6 },
+  timelineItem: { flexDirection: 'row', marginBottom: 0 },
+  timelineDot: { width: 11, height: 11, borderRadius: 6, backgroundColor: C.primaryStrong, marginTop: 17, marginRight: 11 },
+  timelineContent: { flex: 1, paddingVertical: 12, paddingBottom: 14, borderBottomWidth: 1, borderBottomColor: C.cardBorderSoft },
+  historyStatus: { color: C.text, fontWeight: '700', marginBottom: 5 },
+  muted: { color: C.muted, fontSize: 13, lineHeight: 20, marginTop: 6 },
+  errorTitle: { color: C.text, fontSize: 18, fontWeight: '800', marginBottom: 8, textAlign: 'center' },
+  errorText: { color: C.danger, textAlign: 'center', lineHeight: 21 },
+  button: { backgroundColor: C.black, minHeight: 46, justifyContent: 'center', paddingHorizontal: 20, borderRadius: 999, marginTop: 16 },
+  buttonText: { color: C.white, fontWeight: '700', textAlign: 'center' },
+  backLink: { color: C.primaryStrong, fontWeight: '700', marginTop: 16, minHeight: 40, textAlignVertical: 'center' },
+  inlineError: { backgroundColor: C.dangerSoft, padding: 12, borderRadius: 14, marginBottom: 12 },
 });
