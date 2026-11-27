@@ -28,83 +28,37 @@ Ikuti langkah-langkah ini untuk setup database Supabase untuk aplikasi LaporDesa
 
 ## 3. Jalankan Migrations
 
-Jalankan SQL migrations di Supabase Dashboard > **SQL Editor**:
+Jalankan **semua** file di folder `migrations/` secara berurutan (001 sampai 023)
+di Supabase Dashboard > **SQL Editor**. Setiap file harus sukses sebelum lanjut
+ke file berikutnya.
 
-### a. Migration 001: Initial Schema
-1. Buka file `migrations/001_initial_schema.sql`
-2. Copy semua isinya
-3. Paste di SQL Editor
-4. Klik **Run**
-5. Pastikan tidak ada error
+| Migration | Isi |
+| --- | --- |
+| `001_initial_schema.sql` | Tabel dan enum dasar |
+| `002_rls_policies.sql` | RLS awal |
+| `003_functions_triggers.sql` | Trigger kode laporan, status, riwayat |
+| `004_seed_data.sql` | Seed kategori |
+| `005`–`013` | Perbaikan GPS, RLS recursion, profil, verifikasi, prioritas, penugasan, jawab informasi, status petugas |
+| `014`–`020` | Modul RAB: bucket `rab-pdf`, RPC simpan/revisi/terbit, feed RAB publik |
+| `021_security_hardening.sql` | **Wajib**: hardening RLS profiles, audit trail, cleanup foto, bucket `foto-laporan` |
+| `022_rab_draft_atomic.sql` | **Wajib**: RPC atomik simpan draft RAB + akses PDF draft admin |
+| `023_laporan_code_concurrency.sql` | **Wajib**: kode laporan aman untuk insert paralel dan laporan yang dihapus |
 
-### b. Migration 002: RLS Policies
-1. Buka file `migrations/002_rls_policies.sql`
-2. Copy semua isinya
-3. Paste di SQL Editor
-4. Klik **Run**
+> Catatan: `021` sampai `023` bersifat idempotent dan aman dijalankan ulang.
+> Semuanya menutup celah keamanan penting, jadi jangan lewati.
 
-### c. Migration 003: Functions & Triggers
-1. Buka file `migrations/003_functions_triggers.sql`
-2. Copy semua isinya
-3. Paste di SQL Editor
-4. Klik **Run**
+## 4. Storage Buckets
 
-### d. Migration 004: Seed Data
-1. Buka file `migrations/004_seed_data.sql`
-2. Copy bagian seed kategori
-3. Paste di SQL Editor
-4. Klik **Run**
+Kedua bucket dibuat otomatis oleh migration:
 
-## 4. Setup Storage Buckets
+- **`foto-laporan`** (private) — dibuat oleh `021_security_hardening.sql`.
+- **`rab-pdf`** (private, PDF saja) — dibuat oleh `014_rab.sql`.
 
-### Bucket untuk Foto Laporan
-1. Buka **Storage** di dashboard
-2. Klik **New Bucket**
-3. Name: `foto-laporan`
-4. Public: **OFF** (private)
-5. Klik **Create Bucket**
+Storage policies juga sudah disertakan di migration, sehingga **tidak perlu**
+membuat bucket atau policy secara manual lagi.
 
-### Bucket untuk RAB PDF
-1. Klik **New Bucket** lagi
-2. Name: `rab-dokumen`
-3. Public: **OFF** (private)
-4. Klik **Create Bucket**
-
-### Storage Policies
-Jalankan SQL ini di SQL Editor:
-
-```sql
--- Policy untuk foto-laporan bucket
-CREATE POLICY "Authenticated users can upload foto"
-ON storage.objects FOR INSERT
-TO authenticated
-WITH CHECK (
-  bucket_id = 'foto-laporan' AND
-  auth.role() = 'authenticated'
-);
-
-CREATE POLICY "Users can view foto"
-ON storage.objects FOR SELECT
-TO authenticated
-USING (bucket_id = 'foto-laporan');
-
--- Policy untuk rab-dokumen bucket
-CREATE POLICY "Admin can upload RAB"
-ON storage.objects FOR INSERT
-TO authenticated
-WITH CHECK (
-  bucket_id = 'rab-dokumen' AND
-  (SELECT peran FROM profiles WHERE id = auth.uid()) = 'admin'
-);
-
-CREATE POLICY "Admin can manage RAB files"
-ON storage.objects FOR ALL
-TO authenticated
-USING (
-  bucket_id = 'rab-dokumen' AND
-  (SELECT peran FROM profiles WHERE id = auth.uid()) = 'admin'
-);
-```
+Jika bucket sudah pernah dibuat manual dengan nama lama `rab-dokumen`, bucket
+tersebut tidak dipakai oleh aplikasi. Aplikasi memakai `rab-pdf`.
 
 ## 5. Buat Akun Admin & Petugas
 
@@ -118,19 +72,24 @@ USING (
    - Auto Confirm User: **ON**
 4. Klik **Create User**
 5. **Copy UUID user** yang baru dibuat
-6. Buka **SQL Editor** dan jalankan:
+6. Buka **SQL Editor** dan jalankan (upsert, karena trigger `007` sudah otomatis
+   membuat profil `masyarakat` saat user dibuat):
    ```sql
-   INSERT INTO profiles (id, nama, peran) VALUES
-     ('PASTE-UUID-DISINI', 'Admin Desa', 'admin');
+   INSERT INTO public.profiles (id, nama, peran)
+   VALUES ('PASTE-UUID-DISINI', 'Admin Desa', 'admin')
+   ON CONFLICT (id) DO UPDATE
+   SET nama = EXCLUDED.nama, peran = EXCLUDED.peran;
    ```
 
 7. Ulangi untuk petugas:
    - Email: `petugas1@desaku.id`
    - Password: `petugas123`
-   - Kemudian insert profile:
+   - Kemudian jalankan:
    ```sql
-   INSERT INTO profiles (id, nama, peran) VALUES
-     ('PASTE-UUID-PETUGAS-DISINI', 'Petugas Lapangan 1', 'petugas');
+   INSERT INTO public.profiles (id, nama, peran)
+   VALUES ('PASTE-UUID-PETUGAS-DISINI', 'Petugas Lapangan 1', 'petugas')
+   ON CONFLICT (id) DO UPDATE
+   SET nama = EXCLUDED.nama, peran = EXCLUDED.peran;
    ```
 
 ## 6. Verifikasi Setup
@@ -147,11 +106,15 @@ SELECT * FROM profiles;
 -- Harus ada admin dan petugas
 
 -- Cek RLS enabled
-SELECT tablename, rowsecurity 
-FROM pg_tables 
-WHERE schemaname = 'public' 
-AND tablename IN ('profiles', 'laporan', 'rab');
+SELECT tablename, rowsecurity
+FROM pg_tables
+WHERE schemaname = 'public'
+AND tablename IN ('profiles', 'laporan', 'kategori', 'foto_laporan', 'riwayat_status', 'rab');
 -- Semua harus rowsecurity = true
+
+-- Cek bucket & policy storage
+SELECT id, public FROM storage.buckets WHERE id IN ('foto-laporan', 'rab-pdf');
+-- Keduanya harus public = false
 ```
 
 ## 7. Test Koneksi dari Aplikasi

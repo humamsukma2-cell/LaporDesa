@@ -688,7 +688,7 @@ export default function DetailLaporanAdminScreen() {
             <Text style={styles.body}>Nomor: {rab.rab.nomor_rab} · {rab.rab.status === 'published' ? 'Published' : 'Draft'}</Text>
             <Text style={styles.body}>Judul: {rab.rab.judul}</Text>
             <TouchableOpacity style={[styles.actionButton, styles.confirmButton]} onPress={() => router.push({ pathname: '/(admin)/kelola-rab/[id]', params: { id: report.id } })}>
-              <Text style={styles.confirmText}>{rab.rab.status === 'published' ? 'Kelola / revisi RAB' : 'Lanjutkan RAB'}</Text>
+              <Text style={styles.confirmText}>{rab.rab.status === 'published' ? 'Lihat RAB terbit' : 'Lanjutkan RAB'}</Text>
             </TouchableOpacity>
           </View>
         ) : report.status === 'verified' || report.status === 'assigned' || report.status === 'in_progress' || report.status === 'resolved' ? (

@@ -4,7 +4,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { View, ActivityIndicator, StyleSheet } from 'react-native';
 
 export default function Index() {
-  const { session, profile, loading } = useAuth();
+  const { session, profile, profileError, loading } = useAuth();
   const router = useRouter();
   const segments = useSegments();
 
@@ -33,8 +33,12 @@ export default function Index() {
         default:
           router.replace('/(auth)/login');
       }
+    } else if (profileError) {
+      // Sesi ada tetapi profil gagal dimuat: jangan biarkan spinner berputar
+      // selamanya. Kembali ke login agar pesan error profil terlihat.
+      router.replace('/(auth)/login');
     }
-  }, [session, profile, loading, segments]);
+  }, [session, profile, profileError, loading, segments]);
 
   return (
     <View style={styles.container}>

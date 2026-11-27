@@ -60,7 +60,7 @@ export default function KelolaRabAdminScreen() {
       if (result) {
         setNomor(result.rab.nomor_rab);
         setJudul(result.rab.judul);
-        setAnggaran(formatAnggaranInput(String(result.rab.total_anggaran)));
+        setAnggaran(formatAnggaranInput(String(Math.round(Number(result.rab.total_anggaran)))));
         setSumber(result.rab.sumber_dana);
         setCatatan(result.rab.catatan ?? '');
       }
@@ -209,16 +209,18 @@ export default function KelolaRabAdminScreen() {
         });
         if (rpcError) throw rpcError;
       } else {
-        const { data: updatedRows, error: updateError } = await supabase.from('rab').update({
-          nomor_rab: nomor.trim(), judul: judul.trim(), total_anggaran: amount,
-          sumber_dana: sumber.trim(), catatan: catatan.trim() || null,
-        }).eq('id', data.rab.id).eq('status', 'draft').select('id');
-        if (updateError) throw updateError;
-        if (!updatedRows?.length) throw new Error('RAB sudah diterbitkan atau tidak dapat diedit.');
-        const { error: versionError } = await supabase.rpc('revisi_rab', {
-          p_rab_id: data.rab.id, p_path_pdf: uploadedPath, p_ukuran_file: fileSize,
+        // Satu RPC = satu transaksi: metadata draft dan versi PDF tersimpan bersama.
+        const { error: updateError } = await supabase.rpc('perbarui_rab_draft', {
+          p_rab_id: data.rab.id,
+          p_nomor_rab: nomor.trim(),
+          p_judul: judul.trim(),
+          p_total_anggaran: amount,
+          p_sumber_dana: sumber.trim(),
+          p_catatan: catatan.trim() || null,
+          p_path_pdf: uploadedPath,
+          p_ukuran_file: fileSize,
         });
-        if (versionError) throw versionError;
+        if (updateError) throw updateError;
       }
       setNotice(data ? 'Perubahan draft dan PDF berhasil disimpan.' : 'Draft RAB dan PDF berhasil dibuat.');
       await load();

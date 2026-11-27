@@ -35,6 +35,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       } else {
         setLoading(false);
       }
+    }).catch((error) => {
+      console.error('Error reading session:', error);
+      setProfileError('Sesi tidak dapat dibaca. Periksa koneksi lalu masuk kembali.');
+      setLoading(false);
     });
 
     // Listen for auth changes

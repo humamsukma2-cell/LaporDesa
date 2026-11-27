@@ -206,6 +206,8 @@ export default function DetailTugasPetugasScreen() {
     setUploading(true);
     setActionError('');
     setSuccessMessage('');
+    const uploadedPaths: string[] = [];
+    let rowsSaved = false;
     try {
       const { data: authData, error: authError } = await supabase.auth.getUser();
       if (authError) throw authError;
@@ -225,14 +227,21 @@ export default function DetailTugasPetugasScreen() {
         const path = `${id}/hasil-${Date.now()}-${index}.jpg`;
         const { error: uploadError } = await supabase.storage.from(BUCKET).upload(path, blob, { contentType: 'image/jpeg', upsert: false });
         if (uploadError) throw uploadError;
+        uploadedPaths.push(path);
         rows.push({ laporan_id: id, path, jenis: 'hasil_penanganan', uploaded_by: uploaderId });
       }
       const { error: insertError } = await supabase.from('foto_laporan').insert(rows);
       if (insertError) throw insertError;
+      rowsSaved = true;
       setPickedPhotos([]);
       showFeedback('Foto hasil berhasil diunggah.');
       await loadDetail();
     } catch (error) {
+      // Jangan tinggalkan file yatim jika penyimpanan metadata gagal.
+      if (!rowsSaved && uploadedPaths.length) {
+        const { error: cleanupError } = await supabase.storage.from(BUCKET).remove(uploadedPaths);
+        if (cleanupError) console.warn('[DetailTugas] File cleanup failed:', cleanupError.message);
+      }
       console.error('[DetailTugas] Failed to upload:', error);
       showFailure(describeError(error));
     } finally {
@@ -241,7 +250,7 @@ export default function DetailTugasPetugasScreen() {
   }
 
   async function openCoordinates() {
-    if (!task?.latitude || !task?.longitude) return;
+    if (task?.latitude == null || task?.longitude == null) return;
     const url = `https://www.google.com/maps/search/?api=1&query=${task.latitude},${task.longitude}`;
     try {
       const supported = await Linking.canOpenURL(url);
