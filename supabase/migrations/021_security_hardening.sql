@@ -152,7 +152,7 @@ USING (
   AND EXISTS (
     SELECT 1
     FROM public.laporan AS l
-    WHERE l.id::text = split_part(storage.objects.name, '/', 1)
+    WHERE l.id::text = split_part(name, '/', 1)
       AND public.can_access_laporan(l.id)
   )
 );
@@ -166,7 +166,7 @@ WITH CHECK (
   AND EXISTS (
     SELECT 1
     FROM public.laporan AS l
-    WHERE l.id::text = split_part(storage.objects.name, '/', 1)
+    WHERE l.id::text = split_part(name, '/', 1)
       AND public.can_access_laporan(l.id)
   )
 );
