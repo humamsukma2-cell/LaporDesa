@@ -80,110 +80,51 @@ export default function KelolaRabAdminScreen() {
     };
     const amountText = formatRupiah(parseAnggaran(anggaran));
     const date = new Intl.DateTimeFormat('id-ID', { dateStyle: 'long' }).format(new Date());
-    const published = data?.rab.status === 'published';
-    const documentStatus = published ? 'Dokumen terbit' : 'Draft';
     return `<!doctype html>
 <html lang="id"><head><meta charset="utf-8"><title>RAB ${escape(nomor.trim())}</title>
 <style>
-  @page { size: A4; margin: 17mm 18mm 18mm; }
+  @page { size: A4; margin: 22mm 20mm; }
   * { box-sizing: border-box; }
   html, body { margin: 0; padding: 0; background: #ffffff; }
   body {
-    font-family: "Segoe UI", Arial, Helvetica, sans-serif;
-    color: #1B3430; font-size: 10.5pt; line-height: 1.55;
+    font-family: Arial, Helvetica, sans-serif;
+    color: #1a1a1a; font-size: 11pt; line-height: 1.5;
     -webkit-print-color-adjust: exact; print-color-adjust: exact;
   }
-  .sheet { width: 100%; max-width: 174mm; margin: 0 auto; }
-  .topbar { height: 6px; border-radius: 999px; margin-bottom: 20px;
-    background: linear-gradient(90deg, #07564B 0%, #166B57 58%, #C28A4A 100%); }
-  .header { display: flex; align-items: flex-start; justify-content: space-between; gap: 20px;
-    padding-bottom: 16px; border-bottom: 1.5px solid #DCE7E2; }
-  .brand { color: #166B57; font-size: 8pt; font-weight: 800; letter-spacing: .18em; text-transform: uppercase; }
-  h1 { margin: 7px 0 4px; font-size: 20pt; line-height: 1.15; color: #07564B; letter-spacing: -.01em; }
-  .subtitle { margin: 0; color: #758681; font-size: 9.5pt; }
-  .badge { flex: none; margin-top: 3px; padding: 6px 12px; border-radius: 999px; font-size: 8pt;
-    font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }
-  .badge.draft { color: #A86A13; background: #FBF1DF; border: 1px solid #EED9B5; }
-  .badge.published { color: #17805D; background: #E8F3ED; border: 1px solid #CBE7DA; }
-  .meta { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin: 20px 0 0; }
-  .meta-card { background: #F4F8F6; border: 1px solid #DCE7E2; border-radius: 10px; padding: 11px 14px; }
-  .meta-card.wide { grid-column: 1 / -1; }
-  .label { display: block; color: #758681; font-size: 7.5pt; font-weight: 800;
-    letter-spacing: .14em; text-transform: uppercase; margin-bottom: 4px; }
-  .value { display: block; color: #1B3430; font-size: 10.5pt; font-weight: 700; }
-  .amount-card { display: flex; align-items: center; justify-content: space-between; gap: 20px;
-    margin: 18px 0; padding: 20px 24px; border-radius: 14px; color: #ffffff;
-    background: linear-gradient(135deg, #07564B 0%, #166B57 100%); }
-  .amount-label { display: block; color: #CFE8E0; font-size: 8pt; font-weight: 800;
-    letter-spacing: .14em; text-transform: uppercase; }
-  .amount { display: block; margin-top: 4px; font-size: 23pt; line-height: 1.1;
-    font-weight: 800; letter-spacing: -.02em; }
-  .amount-mark { flex: none; width: 58px; height: 58px; border-radius: 50%;
-    border: 1.5px solid rgba(255,255,255,.42); display: flex; align-items: center;
-    justify-content: center; font-size: 9pt; font-weight: 800; letter-spacing: .08em; }
-  .note { margin-top: 18px; padding: 13px 16px; border-radius: 0 10px 10px 0;
-    border-left: 4px solid #C28A4A; background: #FBF6EC; }
-  .note-title { color: #8A5A1F; font-size: 8pt; font-weight: 800;
-    letter-spacing: .12em; text-transform: uppercase; margin-bottom: 4px; }
-  .note p { margin: 0; color: #4A3A25; }
-  .closing { margin-top: 20px; color: #60756F; font-size: 9.5pt; }
-  .signature { margin-top: 34px; display: flex; justify-content: flex-end; }
-  .signature-box { width: 62mm; text-align: center; }
-  .signature-date { color: #60756F; font-size: 9pt; }
-  .signature-title { margin-top: 4px; color: #1B3430; font-weight: 700; font-size: 10pt; }
-  .signature-space { height: 24mm; }
-  .signature-line { border-top: 1px solid #334155; padding-top: 5px; font-weight: 700; font-size: 10pt; }
-  .signature-name { margin-top: 2px; color: #758681; font-size: 8.5pt; }
-  .footer { margin-top: 22px; padding-top: 10px; border-top: 1px solid #E4ECE8;
-    display: flex; justify-content: space-between; gap: 12px;
-    color: #8AA09A; font-size: 7.5pt; letter-spacing: .04em; }
+  .sheet { width: 100%; max-width: 170mm; margin: 0 auto; }
+  h1 { margin: 0 0 6px; text-align: center; font-size: 19pt; letter-spacing: .02em; }
+  .subtitle { margin: 0 0 34px; text-align: center; font-size: 10pt; letter-spacing: .03em; }
+  table { width: 100%; border-collapse: collapse; }
+  td { border: 1px solid #9AA4B2; padding: 10px 12px; vertical-align: top; }
+  td:first-child { width: 36%; font-weight: 700; background: #F1F4F8; }
+  td.value { background: #FFFFFF; }
+  .note { margin-top: 16px; color: #333333; }
+  .closing { margin-top: 10px; color: #333333; }
+  .signature { margin-top: 58px; text-align: right; }
+  .signature-title { margin-right: 18mm; font-size: 10.5pt; }
+  .signature-space { height: 72px; }
+  .signature-line { width: 58mm; margin-left: auto; border-top: 1px solid #333333; }
 </style></head>
 <body><div class="sheet">
-  <div class="topbar"></div>
-  <header class="header">
-    <div>
-      <div class="brand">LaporDesa &middot; Pemerintah Desa</div>
-      <h1>Rencana Anggaran Biaya</h1>
-      <p class="subtitle">Dokumen perencanaan biaya perbaikan infrastruktur desa</p>
-    </div>
-    <span class="badge ${published ? 'published' : 'draft'}">${documentStatus}</span>
-  </header>
+  <h1>RENCANA ANGGARAN BIAYA</h1>
+  <p class="subtitle">DOKUMEN RAB LAPORAN INFRASTRUKTUR DESA</p>
 
-  <div class="meta">
-    <div class="meta-card wide"><span class="label">Nomor RAB</span><span class="value">${escape(nomor.trim())}</span></div>
-    <div class="meta-card wide"><span class="label">Judul perbaikan</span><span class="value">${escape(judul.trim())}</span></div>
-    <div class="meta-card"><span class="label">Sumber dana</span><span class="value">${escape(sumber.trim())}</span></div>
-    <div class="meta-card"><span class="label">Tanggal dokumen</span><span class="value">${escape(date)}</span></div>
-  </div>
+  <table>
+    <tr><td>Nomor RAB</td><td class="value">${escape(nomor.trim())}</td></tr>
+    <tr><td>Judul perbaikan</td><td class="value">${escape(judul.trim())}</td></tr>
+    <tr><td>Anggaran perbaikan</td><td class="value">${escape(amountText)}</td></tr>
+    <tr><td>Sumber dana</td><td class="value">${escape(sumber.trim())}</td></tr>
+    <tr><td>Tanggal dokumen</td><td class="value">${escape(date)}</td></tr>
+  </table>
 
-  <div class="amount-card">
-    <div>
-      <span class="amount-label">Total anggaran perbaikan</span>
-      <span class="amount">${escape(amountText)}</span>
-    </div>
-    <span class="amount-mark">RAB</span>
-  </div>
+  ${catatan.trim() ? `<div class="note"><b>Catatan:</b> ${escape(catatan.trim(), true)}</div>` : ''}
 
-  ${catatan.trim() ? `<section class="note"><div class="note-title">Catatan</div><p>${escape(catatan.trim(), true)}</p></section>` : ''}
-
-  <section class="closing">
-    <p>Dokumen ini merupakan ringkasan Rencana Anggaran Biaya yang dibuat melalui aplikasi
-    LaporDesa dan menjadi bagian dari transparansi pengelolaan infrastruktur desa.</p>
-  </section>
+  <p class="closing">Dokumen ini merupakan ringkasan RAB yang diterbitkan melalui aplikasi LaporDesa.</p>
 
   <div class="signature">
-    <div class="signature-box">
-      <div class="signature-date">${escape(date)}</div>
-      <div class="signature-title">Pemerintah Desa</div>
-      <div class="signature-space"></div>
-      <div class="signature-line">Kepala Desa</div>
-      <div class="signature-name">( .................................. )</div>
-    </div>
-  </div>
-
-  <div class="footer">
-    <span>Dibuat otomatis oleh LaporDesa</span>
-    <span>${escape(nomor.trim())}</span>
+    <div class="signature-title">Pemerintah Desa</div>
+    <div class="signature-space"></div>
+    <div class="signature-line"></div>
   </div>
 </div></body></html>`;
   }
