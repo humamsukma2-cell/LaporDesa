@@ -74,27 +74,118 @@ export default function KelolaRabAdminScreen() {
   useEffect(() => { void load(); }, [load]);
 
   function makeHtml() {
-    const escape = (value: string) => value.replace(/[&<>"']/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char] ?? char));
-    const amount = parseAnggaran(anggaran);
-    const amountText = formatRupiah(amount);
+    const escape = (value: string, multiline = false) => {
+      const safe = value.replace(/[&<>"']/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char] ?? char));
+      return multiline ? safe.replace(/\r?\n/g, '<br>') : safe;
+    };
+    const amountText = formatRupiah(parseAnggaran(anggaran));
     const date = new Intl.DateTimeFormat('id-ID', { dateStyle: 'long' }).format(new Date());
-    return `<!doctype html><html><head><meta charset="utf-8"><style>
-      @page { size: A4; margin: 22mm 20mm; } body { font-family: Arial, sans-serif; color: #172033; font-size: 12pt; }
-      h1 { text-align: center; font-size: 17pt; margin: 0 0 6px; } .sub { text-align:center; color:#475569; margin-bottom:26px; }
-      table { width:100%; border-collapse:collapse; margin:20px 0; } td { border:1px solid #94a3b8; padding:10px; }
-      td:first-child { width:35%; font-weight:bold; background:#f1f5f9; } .amount { font-size:16pt; font-weight:bold; }
-      .note { margin-top:24px; white-space:pre-wrap; } .footer { margin-top:52px; text-align:right; }
-    </style></head><body>
-      <h1>RENCANA ANGGARAN BIAYA</h1><div class="sub">DOKUMEN RAB LAPORAN INFRASTRUKTUR DESA</div>
-      <table><tr><td>Nomor RAB</td><td>${escape(nomor.trim())}</td></tr>
-      <tr><td>Judul perbaikan</td><td>${escape(judul.trim())}</td></tr>
-      <tr><td>Anggaran perbaikan</td><td class="amount">${escape(amountText) }</td></tr>
-      <tr><td>Sumber dana</td><td>${escape(sumber.trim())}</td></tr>
-      <tr><td>Tanggal dokumen</td><td>${escape(date)}</td></tr></table>
-      ${catatan.trim() ? `<div class="note"><b>Catatan:</b><br>${escape(catatan.trim())}</div>` : ''}
-      <p>Dokumen ini merupakan ringkasan RAB yang diterbitkan melalui aplikasi LaporDesa.</p>
-      <div class="footer">Pemerintah Desa<br><br><br>________________________</div>
-    </body></html>`;
+    const published = data?.rab.status === 'published';
+    const documentStatus = published ? 'Dokumen terbit' : 'Draft';
+    return `<!doctype html>
+<html lang="id"><head><meta charset="utf-8"><title>RAB ${escape(nomor.trim())}</title>
+<style>
+  @page { size: A4; margin: 17mm 18mm 18mm; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; background: #ffffff; }
+  body {
+    font-family: "Segoe UI", Arial, Helvetica, sans-serif;
+    color: #1B3430; font-size: 10.5pt; line-height: 1.55;
+    -webkit-print-color-adjust: exact; print-color-adjust: exact;
+  }
+  .sheet { width: 100%; max-width: 174mm; margin: 0 auto; }
+  .topbar { height: 6px; border-radius: 999px; margin-bottom: 20px;
+    background: linear-gradient(90deg, #07564B 0%, #166B57 58%, #C28A4A 100%); }
+  .header { display: flex; align-items: flex-start; justify-content: space-between; gap: 20px;
+    padding-bottom: 16px; border-bottom: 1.5px solid #DCE7E2; }
+  .brand { color: #166B57; font-size: 8pt; font-weight: 800; letter-spacing: .18em; text-transform: uppercase; }
+  h1 { margin: 7px 0 4px; font-size: 20pt; line-height: 1.15; color: #07564B; letter-spacing: -.01em; }
+  .subtitle { margin: 0; color: #758681; font-size: 9.5pt; }
+  .badge { flex: none; margin-top: 3px; padding: 6px 12px; border-radius: 999px; font-size: 8pt;
+    font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }
+  .badge.draft { color: #A86A13; background: #FBF1DF; border: 1px solid #EED9B5; }
+  .badge.published { color: #17805D; background: #E8F3ED; border: 1px solid #CBE7DA; }
+  .meta { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin: 20px 0 0; }
+  .meta-card { background: #F4F8F6; border: 1px solid #DCE7E2; border-radius: 10px; padding: 11px 14px; }
+  .meta-card.wide { grid-column: 1 / -1; }
+  .label { display: block; color: #758681; font-size: 7.5pt; font-weight: 800;
+    letter-spacing: .14em; text-transform: uppercase; margin-bottom: 4px; }
+  .value { display: block; color: #1B3430; font-size: 10.5pt; font-weight: 700; }
+  .amount-card { display: flex; align-items: center; justify-content: space-between; gap: 20px;
+    margin: 18px 0; padding: 20px 24px; border-radius: 14px; color: #ffffff;
+    background: linear-gradient(135deg, #07564B 0%, #166B57 100%); }
+  .amount-label { display: block; color: #CFE8E0; font-size: 8pt; font-weight: 800;
+    letter-spacing: .14em; text-transform: uppercase; }
+  .amount { display: block; margin-top: 4px; font-size: 23pt; line-height: 1.1;
+    font-weight: 800; letter-spacing: -.02em; }
+  .amount-mark { flex: none; width: 58px; height: 58px; border-radius: 50%;
+    border: 1.5px solid rgba(255,255,255,.42); display: flex; align-items: center;
+    justify-content: center; font-size: 9pt; font-weight: 800; letter-spacing: .08em; }
+  .note { margin-top: 18px; padding: 13px 16px; border-radius: 0 10px 10px 0;
+    border-left: 4px solid #C28A4A; background: #FBF6EC; }
+  .note-title { color: #8A5A1F; font-size: 8pt; font-weight: 800;
+    letter-spacing: .12em; text-transform: uppercase; margin-bottom: 4px; }
+  .note p { margin: 0; color: #4A3A25; }
+  .closing { margin-top: 20px; color: #60756F; font-size: 9.5pt; }
+  .signature { margin-top: 34px; display: flex; justify-content: flex-end; }
+  .signature-box { width: 62mm; text-align: center; }
+  .signature-date { color: #60756F; font-size: 9pt; }
+  .signature-title { margin-top: 4px; color: #1B3430; font-weight: 700; font-size: 10pt; }
+  .signature-space { height: 24mm; }
+  .signature-line { border-top: 1px solid #334155; padding-top: 5px; font-weight: 700; font-size: 10pt; }
+  .signature-name { margin-top: 2px; color: #758681; font-size: 8.5pt; }
+  .footer { margin-top: 22px; padding-top: 10px; border-top: 1px solid #E4ECE8;
+    display: flex; justify-content: space-between; gap: 12px;
+    color: #8AA09A; font-size: 7.5pt; letter-spacing: .04em; }
+</style></head>
+<body><div class="sheet">
+  <div class="topbar"></div>
+  <header class="header">
+    <div>
+      <div class="brand">LaporDesa &middot; Pemerintah Desa</div>
+      <h1>Rencana Anggaran Biaya</h1>
+      <p class="subtitle">Dokumen perencanaan biaya perbaikan infrastruktur desa</p>
+    </div>
+    <span class="badge ${published ? 'published' : 'draft'}">${documentStatus}</span>
+  </header>
+
+  <div class="meta">
+    <div class="meta-card wide"><span class="label">Nomor RAB</span><span class="value">${escape(nomor.trim())}</span></div>
+    <div class="meta-card wide"><span class="label">Judul perbaikan</span><span class="value">${escape(judul.trim())}</span></div>
+    <div class="meta-card"><span class="label">Sumber dana</span><span class="value">${escape(sumber.trim())}</span></div>
+    <div class="meta-card"><span class="label">Tanggal dokumen</span><span class="value">${escape(date)}</span></div>
+  </div>
+
+  <div class="amount-card">
+    <div>
+      <span class="amount-label">Total anggaran perbaikan</span>
+      <span class="amount">${escape(amountText)}</span>
+    </div>
+    <span class="amount-mark">RAB</span>
+  </div>
+
+  ${catatan.trim() ? `<section class="note"><div class="note-title">Catatan</div><p>${escape(catatan.trim(), true)}</p></section>` : ''}
+
+  <section class="closing">
+    <p>Dokumen ini merupakan ringkasan Rencana Anggaran Biaya yang dibuat melalui aplikasi
+    LaporDesa dan menjadi bagian dari transparansi pengelolaan infrastruktur desa.</p>
+  </section>
+
+  <div class="signature">
+    <div class="signature-box">
+      <div class="signature-date">${escape(date)}</div>
+      <div class="signature-title">Pemerintah Desa</div>
+      <div class="signature-space"></div>
+      <div class="signature-line">Kepala Desa</div>
+      <div class="signature-name">( .................................. )</div>
+    </div>
+  </div>
+
+  <div class="footer">
+    <span>Dibuat otomatis oleh LaporDesa</span>
+    <span>${escape(nomor.trim())}</span>
+  </div>
+</div></body></html>`;
   }
 
   async function generatePdfBlob(): Promise<Blob> {
@@ -297,7 +388,12 @@ export default function KelolaRabAdminScreen() {
   async function previewPdf() {
     setError('');
     try {
-      await Print.printAsync({ html: makeHtml() });
+      const html = makeHtml();
+      if (Platform.OS === 'web') {
+        printHtmlOnWeb(html);
+        return;
+      }
+      await Print.printAsync({ html });
     } catch (e) {
       setError(describeError(e));
     }
@@ -379,6 +475,76 @@ export default function KelolaRabAdminScreen() {
       </AdminShell>
     </KeyboardAvoidingView>
   );
+}
+
+type BrowserIframe = {
+  style: Record<string, string>;
+  contentWindow: {
+    document: { open: () => void; write: (markup: string) => void; close: () => void };
+    focus: () => void;
+    print: () => void;
+  } | null;
+  onload: (() => void) | null;
+  setAttribute: (name: string, value: string) => void;
+  remove: () => void;
+};
+
+/**
+ * expo-print di web mengabaikan opsi `html` dan mencetak seluruh halaman aplikasi.
+ * Cetak dokumen RAB lewat iframe tersembunyi agar pratinjau browser hanya berisi
+ * dokumen RAB yang rapi, bukan shell admin.
+ */
+function printHtmlOnWeb(html: string) {
+  const browser = globalThis as unknown as {
+    document?: {
+      createElement: (tag: string) => BrowserIframe;
+      body?: { appendChild: (node: BrowserIframe) => void };
+    };
+    setTimeout: (callback: () => void, delay?: number) => number;
+  };
+  const documentRef = browser.document;
+  if (!documentRef?.body) throw new Error('Pencetakan dokumen hanya tersedia di browser.');
+
+  const iframe = documentRef.createElement('iframe');
+  iframe.setAttribute('aria-hidden', 'true');
+  iframe.setAttribute('title', 'Dokumen RAB');
+  iframe.style.position = 'fixed';
+  iframe.style.top = '0';
+  iframe.style.left = '-10000px';
+  iframe.style.width = '1024px';
+  iframe.style.height = '1400px';
+  iframe.style.border = '0';
+  iframe.style.opacity = '0';
+  iframe.style.pointerEvents = 'none';
+  documentRef.body.appendChild(iframe);
+
+  const frameWindow = iframe.contentWindow;
+  if (!frameWindow) {
+    iframe.remove();
+    throw new Error('Dokumen cetak tidak dapat disiapkan oleh browser.');
+  }
+
+  const frameDocument = frameWindow.document;
+  frameDocument.open();
+  frameDocument.write(html);
+  frameDocument.close();
+
+  let printed = false;
+  const triggerPrint = () => {
+    if (printed) return;
+    printed = true;
+    try {
+      frameWindow.focus();
+      frameWindow.print();
+    } finally {
+      // Beri waktu dialog cetak selesai sebelum iframe dilepas.
+      browser.setTimeout(() => iframe.remove(), 1200);
+    }
+  };
+
+  iframe.onload = () => browser.setTimeout(triggerPrint, 120);
+  // Fallback untuk browser yang tidak memicu onload pada document.write.
+  browser.setTimeout(triggerPrint, 700);
 }
 
 async function blobToBase64(blob: Blob): Promise<string> {
